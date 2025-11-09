@@ -1,4 +1,6 @@
 import date_utils from './date_utils';
+import type { Task } from './index';
+import type Gantt from './index';
 
 function getDecade(d: Date): string {
     const year = d.getFullYear();
@@ -125,24 +127,35 @@ const DEFAULT_OPTIONS = {
     lines: 'both',
     move_dependencies: true,
     padding: 18,
-    popup: (ctx: any) => {
+    popup: (ctx: {
+        task: Task;
+        chart: Gantt;
+        get_title: () => HTMLElement;
+        set_title: (title: string) => void;
+        get_subtitle: () => HTMLElement;
+        set_subtitle: (subtitle: string) => void;
+        get_details: () => HTMLElement;
+        set_details: (details: string) => void;
+        add_action: (html: string | ((task: Task) => string), func: (task: Task, gantt: Gantt, event: MouseEvent) => void) => void;
+    }) => {
         ctx.set_title(ctx.task.name);
         if (ctx.task.description) ctx.set_subtitle(ctx.task.description);
         else ctx.set_subtitle('');
 
+        const task = ctx.task;
         const start_date = date_utils.format(
-            ctx.task._start,
+            task._start!,
             'MMM D',
             ctx.chart.options.language,
         );
         const end_date = date_utils.format(
-            date_utils.add(ctx.task._end, -1, 'second'),
+            date_utils.add(task._end!, -1, 'second'),
             'MMM D',
             ctx.chart.options.language,
         );
 
         ctx.set_details(
-            `${start_date} - ${end_date} (${ctx.task.actual_duration} days${ctx.task.ignored_duration ? ' + ' + ctx.task.ignored_duration + ' excluded' : ''})<br/>Progress: ${Math.floor(ctx.task.progress * 100) / 100}%`,
+            `${start_date} - ${end_date} (${task.actual_duration} days${task.ignored_duration ? ' + ' + task.ignored_duration + ' excluded' : ''})<br/>Progress: ${Math.floor((task.progress || 0) * 100) / 100}%`,
         );
     },
     popup_on: 'click',

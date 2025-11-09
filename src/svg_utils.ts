@@ -7,7 +7,7 @@ export function $(expr: DOMSelector, con?: Document | Element): Element | null {
 }
 
 interface SVGAttributes {
-    [key: string]: any;
+    [key: string]: string | number | Element | undefined;
     append_to?: Element;
     innerHTML?: string;
     clipPath?: string;
@@ -18,13 +18,20 @@ export function createSVG(tag: string, attrs: SVGAttributes): SVGElement {
     for (let attr in attrs) {
         if (attr === 'append_to') {
             const parent = attrs.append_to;
-            parent!.appendChild(elem);
+            if (parent) parent.appendChild(elem);
         } else if (attr === 'innerHTML') {
-            elem.innerHTML = attrs.innerHTML!;
+            const innerHTML = attrs.innerHTML;
+            if (innerHTML) elem.innerHTML = innerHTML;
         } else if (attr === 'clipPath') {
-            elem.setAttribute('clip-path', 'url(#' + attrs[attr] + ')');
+            const clipPath = attrs[attr];
+            if (typeof clipPath === 'string') {
+                elem.setAttribute('clip-path', 'url(#' + clipPath + ')');
+            }
         } else {
-            elem.setAttribute(attr, attrs[attr]);
+            const value = attrs[attr];
+            if (value !== undefined) {
+                elem.setAttribute(attr, String(value));
+            }
         }
     }
     return elem;
@@ -43,7 +50,7 @@ export function animateSVG(
         // trigger artificial click event
         const event = document.createEvent('HTMLEvents');
         event.initEvent('click', true, true);
-        (event as any).eventName = 'click';
+        Object.defineProperty(event, 'eventName', { value: 'click', writable: true });
         animatedSvgElement.dispatchEvent(event);
     }
 }
@@ -110,10 +117,15 @@ $.on = (
     callback?: EventCallback
 ): void => {
     if (!callback) {
-        callback = selector as EventCallback;
-        $.bind(element, event, callback);
+        if (typeof selector !== 'function') {
+            throw new Error('Callback must be a function');
+        }
+        $.bind(element, event, selector);
     } else {
-        $.delegate(element, event, selector as string, callback);
+        if (typeof selector !== 'string') {
+            throw new Error('Selector must be a string');
+        }
+        $.delegate(element, event, selector, callback);
     }
 };
 
@@ -122,8 +134,8 @@ $.off = (element: Element, event: string, handler: EventListener): void => {
 };
 
 $.bind = (element: Element, event: string, callback: EventCallback): void => {
-    event.split(/\s+/).forEach(function (event) {
-        element.addEventListener(event, callback as EventListener);
+    event.split(/\s+/).forEach(function (eventName) {
+        element.addEventListener(eventName, callback as EventListener);
     });
 };
 
@@ -134,9 +146,10 @@ $.delegate = (
     callback: EventCallback
 ): void => {
     element.addEventListener(event, function (e) {
-        const delegatedTarget = (e.target as Element).closest(selector);
+        if (!(e.target instanceof Element)) return;
+        const delegatedTarget = e.target.closest(selector);
         if (delegatedTarget) {
-            (e as any).delegatedTarget = delegatedTarget;
+            Object.defineProperty(e, 'delegatedTarget', { value: delegatedTarget, writable: true });
             callback.call(this, e, delegatedTarget);
         }
     });
@@ -149,7 +162,8 @@ $.closest = (selector: string, element: Element | null): Element | null => {
         return element;
     }
 
-    return $.closest(selector, element.parentNode as Element);
+    const parent = element.parentNode;
+    return parent instanceof Element ? $.closest(selector, parent) : null;
 };
 
 $.attr = (

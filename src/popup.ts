@@ -1,7 +1,5 @@
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Task = any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Gantt = any;
+import type { Task } from './index';
+import type Gantt from './index';
 
 interface PopupContext {
     task: Task;
@@ -53,12 +51,15 @@ export default class Popup {
         `;
         this.hide();
 
-        const title = this.parent.querySelector('.title') as HTMLElement;
-        const subtitle = this.parent.querySelector('.subtitle') as HTMLElement;
-        const details = this.parent.querySelector('.details') as HTMLElement;
-        const actions = this.parent.querySelector('.actions') as HTMLElement;
+        const title = this.parent.querySelector('.title');
+        const subtitle = this.parent.querySelector('.subtitle');
+        const details = this.parent.querySelector('.details');
+        const actions = this.parent.querySelector('.actions');
 
-        if (!title || !subtitle || !details || !actions) {
+        if (!(title instanceof HTMLElement) ||
+            !(subtitle instanceof HTMLElement) ||
+            !(details instanceof HTMLElement) ||
+            !(actions instanceof HTMLElement)) {
             throw new Error('Failed to create popup elements');
         }
 
