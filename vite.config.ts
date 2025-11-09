@@ -19,10 +19,9 @@ export default defineConfig({
             output: {
                 format: 'cjs',
                 assetFileNames: 'frappe-gantt[extname]',
-                entryFileNames: 'frappe-gantt.[format].js'
+                entryFileNames: 'frappe-gantt.[format].js',
+                interop: 'auto'
             },
         },
-    },
-    output: { interop: 'auto' },
-    server: { watch: { include: ['dist/*', 'src/*'] } }
+    }
 });
