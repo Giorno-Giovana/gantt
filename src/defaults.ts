@@ -1,11 +1,11 @@
 import date_utils from './date_utils';
 
-function getDecade(d) {
+function getDecade(d: Date): string {
     const year = d.getFullYear();
     return year - (year % 10) + '';
 }
 
-function formatWeek(d, ld, lang) {
+function formatWeek(d: Date, ld: Date | null, lang: string): string {
     let endOfWeek = date_utils.add(d, 6, 'day');
     let endFormat = endOfWeek.getMonth() !== d.getMonth() ? 'D MMM' : 'D';
     let beginFormat = !ld || d.getMonth() !== ld.getMonth() ? 'D MMM' : 'D';
@@ -19,7 +19,7 @@ const DEFAULT_VIEW_MODES = [
         step: '1h',
         date_format: 'YYYY-MM-DD HH:',
         lower_text: 'HH',
-        upper_text: (d, ld, lang) =>
+        upper_text: (d: Date, ld: Date | null, lang: string) =>
             !ld || d.getDate() !== ld.getDate()
                 ? date_utils.format(d, 'D MMMM', lang)
                 : '',
@@ -31,7 +31,7 @@ const DEFAULT_VIEW_MODES = [
         step: '6h',
         date_format: 'YYYY-MM-DD HH:',
         lower_text: 'HH',
-        upper_text: (d, ld, lang) =>
+        upper_text: (d: Date, ld: Date | null, lang: string) =>
             !ld || d.getDate() !== ld.getDate()
                 ? date_utils.format(d, 'D MMM', lang)
                 : '',
@@ -43,9 +43,9 @@ const DEFAULT_VIEW_MODES = [
         step: '12h',
         date_format: 'YYYY-MM-DD HH:',
         lower_text: 'HH',
-        upper_text: (d, ld, lang) =>
+        upper_text: (d: Date, ld: Date | null, lang: string) =>
             !ld || d.getDate() !== ld.getDate()
-                ? d.getMonth() !== d.getMonth()
+                ? !ld || d.getMonth() !== ld.getMonth()
                     ? date_utils.format(d, 'D MMM', lang)
                     : date_utils.format(d, 'D', lang)
                 : '',
@@ -56,15 +56,15 @@ const DEFAULT_VIEW_MODES = [
         padding: '7d',
         date_format: 'YYYY-MM-DD',
         step: '1d',
-        lower_text: (d, ld, lang) =>
+        lower_text: (d: Date, ld: Date | null, lang: string) =>
             !ld || d.getDate() !== ld.getDate()
                 ? date_utils.format(d, 'D', lang)
                 : '',
-        upper_text: (d, ld, lang) =>
+        upper_text: (d: Date, ld: Date | null, lang: string) =>
             !ld || d.getMonth() !== ld.getMonth()
                 ? date_utils.format(d, 'MMMM', lang)
                 : '',
-        thick_line: (d) => d.getDay() === 1,
+        thick_line: (d: Date) => d.getDay() === 1,
     },
     {
         name: 'Week',
@@ -73,11 +73,11 @@ const DEFAULT_VIEW_MODES = [
         date_format: 'YYYY-MM-DD',
         column_width: 140,
         lower_text: formatWeek,
-        upper_text: (d, ld, lang) =>
+        upper_text: (d: Date, ld: Date | null, lang: string) =>
             !ld || d.getMonth() !== ld.getMonth()
                 ? date_utils.format(d, 'MMMM', lang)
                 : '',
-        thick_line: (d) => d.getDate() >= 1 && d.getDate() <= 7,
+        thick_line: (d: Date) => d.getDate() >= 1 && d.getDate() <= 7,
         upper_text_frequency: 4,
     },
     {
@@ -87,11 +87,11 @@ const DEFAULT_VIEW_MODES = [
         column_width: 120,
         date_format: 'YYYY-MM',
         lower_text: 'MMMM',
-        upper_text: (d, ld, lang) =>
+        upper_text: (d: Date, ld: Date | null, lang: string) =>
             !ld || d.getFullYear() !== ld.getFullYear()
                 ? date_utils.format(d, 'YYYY', lang)
                 : '',
-        thick_line: (d) => d.getMonth() % 3 === 0,
+        thick_line: (d: Date) => d.getMonth() % 3 === 0,
         snap_at: '7d',
     },
     {
@@ -100,7 +100,7 @@ const DEFAULT_VIEW_MODES = [
         step: '1y',
         column_width: 120,
         date_format: 'YYYY',
-        upper_text: (d, ld, lang) =>
+        upper_text: (d: Date, ld: Date | null, lang: string) =>
             !ld || getDecade(d) !== getDecade(ld) ? getDecade(d) : '',
         lower_text: 'YYYY',
         snap_at: '30d',
@@ -125,7 +125,7 @@ const DEFAULT_OPTIONS = {
     lines: 'both',
     move_dependencies: true,
     padding: 18,
-    popup: (ctx) => {
+    popup: (ctx: any) => {
         ctx.set_title(ctx.task.name);
         if (ctx.task.description) ctx.set_subtitle(ctx.task.description);
         else ctx.set_subtitle('');
@@ -155,7 +155,7 @@ const DEFAULT_OPTIONS = {
     view_mode: 'Day',
     view_mode_select: false,
     view_modes: DEFAULT_VIEW_MODES,
-    is_weekend: (d) => d.getDay() === 0 || d.getDay() === 6,
+    is_weekend: (d: Date) => d.getDay() === 0 || d.getDay() === 6,
 };
 
 export { DEFAULT_OPTIONS, DEFAULT_VIEW_MODES };
