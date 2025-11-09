@@ -1,7 +1,19 @@
 import date_utils from './date_utils';
 import { $, createSVG, animateSVG } from './svg_utils';
 
-// Extend SVGElement interface to include custom methods
+/**
+ * Extend the global SVGElement interface to include custom helper methods.
+ *
+ * These methods are added to SVGElement.prototype at runtime in the prepare_helpers() method
+ * to provide convenient access to SVG element attributes and computed properties.
+ *
+ * Without this declaration, TypeScript would not recognize these methods and would throw
+ * type errors when calling them (e.g., this.$bar.getX()).
+ *
+ * Note: Modifying built-in prototypes is generally discouraged in modern JavaScript.
+ * A better approach would be to use standalone utility functions, but this code maintains
+ * compatibility with the existing architecture.
+ */
 declare global {
     interface SVGElement {
         getX(): number;
