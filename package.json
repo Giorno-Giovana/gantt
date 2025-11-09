@@ -2,14 +2,15 @@
     "name": "frappe-gantt",
     "version": "1.0.4",
     "description": "A simple, modern, interactive gantt library for the web",
-    "main": "src/index.js",
+    "main": "src/index.ts",
     "type": "module",
     "scripts": {
         "dev": "vite build --watch",
         "build": "vite build",
-        "lint": "eslint src/**/*.js",
-        "prettier": "prettier --write \"{src/*,tests/*,rollup.config}.js\"",
-        "prettier-check": "prettier --check \"{src/*,tests/*,rollup.config}.js\""
+        "lint": "eslint src/**/*.ts",
+        "prettier": "prettier --write \"{src/*,tests/*,vite.config}.ts\"",
+        "prettier-check": "prettier --check \"{src/*,tests/*,vite.config}.ts\"",
+        "type-check": "tsc --noEmit"
     },
     "repository": {
         "type": "git",
@@ -42,11 +43,13 @@
     },
     "homepage": "https://github.com/frappe/gantt",
     "devDependencies": {
+        "@types/bun": "^1.3.2",
         "eslint": "^9.15.0",
         "eslint-config-prettier": "^2.9.0",
         "eslint-plugin-prettier": "^2.6.0",
         "postcss-nesting": "^12.1.2",
         "prettier": "3.2.5",
+        "typescript": "^5.9.3",
         "vite": "^5.2.10"
     },
     "eslintIgnore": [
