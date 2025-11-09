@@ -7,6 +7,9 @@
     "scripts": {
         "dev": "vite build --watch",
         "build": "vite build",
+        "test": "bun test",
+        "test:watch": "bun test --watch",
+        "test:coverage": "bun test --coverage",
         "lint": "eslint src/**/*.ts",
         "prettier": "prettier --write \"{src/*,tests/*,vite.config}.ts\"",
         "prettier-check": "prettier --check \"{src/*,tests/*,vite.config}.ts\"",
@@ -47,6 +50,7 @@
         "eslint": "^9.15.0",
         "eslint-config-prettier": "^2.9.0",
         "eslint-plugin-prettier": "^2.6.0",
+        "happy-dom": "^15.11.8",
         "postcss-nesting": "^12.1.2",
         "prettier": "3.2.5",
         "typescript": "^5.9.3",
