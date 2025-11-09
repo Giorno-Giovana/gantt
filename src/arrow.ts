@@ -4,15 +4,13 @@ export default class Arrow {
     gantt: any;
     from_task: any;
     to_task: any;
-    path: string;
-    element: SVGElement;
+    path!: string;
+    element!: SVGElement;
 
     constructor(gantt: any, from_task: any, to_task: any) {
         this.gantt = gantt;
         this.from_task = from_task;
         this.to_task = to_task;
-        this.path = '';
-        this.element = document.createElementNS('http://www.w3.org/2000/svg', 'path');
 
         this.calculate_path();
         this.draw();
