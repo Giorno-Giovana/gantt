@@ -1,5 +1,42 @@
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Task = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Gantt = any;
+
+interface PopupContext {
+    task: Task;
+    chart: Gantt;
+    get_title: () => HTMLElement;
+    set_title: (title: string) => void;
+    get_subtitle: () => HTMLElement;
+    set_subtitle: (subtitle: string) => void;
+    get_details: () => HTMLElement;
+    set_details: (details: string) => void;
+    add_action: (
+        html: string | ((task: Task) => string),
+        func: (task: Task, gantt: Gantt, event: MouseEvent) => void
+    ) => void;
+}
+
+type PopupFunction = (context: PopupContext) => string | false | void;
+
+interface ShowOptions {
+    x: number;
+    y: number;
+    task: Task;
+    target: Element;
+}
+
 export default class Popup {
-    constructor(parent, popup_func, gantt) {
+    parent: HTMLElement;
+    popup_func: PopupFunction;
+    gantt: Gantt;
+    title!: HTMLElement;
+    subtitle!: HTMLElement;
+    details!: HTMLElement;
+    actions!: HTMLElement;
+
+    constructor(parent: HTMLElement, popup_func: PopupFunction, gantt: Gantt) {
         this.parent = parent;
         this.popup_func = popup_func;
         this.gantt = gantt;
@@ -7,7 +44,7 @@ export default class Popup {
         this.make();
     }
 
-    make() {
+    make(): void {
         this.parent.innerHTML = `
             <div class="title"></div>
             <div class="subtitle"></div>
@@ -16,32 +53,47 @@ export default class Popup {
         `;
         this.hide();
 
-        this.title = this.parent.querySelector('.title');
-        this.subtitle = this.parent.querySelector('.subtitle');
-        this.details = this.parent.querySelector('.details');
-        this.actions = this.parent.querySelector('.actions');
+        const title = this.parent.querySelector('.title') as HTMLElement;
+        const subtitle = this.parent.querySelector('.subtitle') as HTMLElement;
+        const details = this.parent.querySelector('.details') as HTMLElement;
+        const actions = this.parent.querySelector('.actions') as HTMLElement;
+
+        if (!title || !subtitle || !details || !actions) {
+            throw new Error('Failed to create popup elements');
+        }
+
+        this.title = title;
+        this.subtitle = subtitle;
+        this.details = details;
+        this.actions = actions;
     }
 
-    show({ x, y, task, target }) {
+    show({ x, y, task, target }: ShowOptions): void {
         this.actions.innerHTML = '';
-        let html = this.popup_func({
+        const html = this.popup_func({
             task,
             chart: this.gantt,
             get_title: () => this.title,
-            set_title: (title) => (this.title.innerHTML = title),
+            set_title: (title: string) => (this.title.innerHTML = title),
             get_subtitle: () => this.subtitle,
-            set_subtitle: (subtitle) => (this.subtitle.innerHTML = subtitle),
+            set_subtitle: (subtitle: string) => (this.subtitle.innerHTML = subtitle),
             get_details: () => this.details,
-            set_details: (details) => (this.details.innerHTML = details),
-            add_action: (html, func) => {
-                let action = this.gantt.create_el({
+            set_details: (details: string) => (this.details.innerHTML = details),
+            add_action: (
+                html: string | ((task: Task) => string),
+                func: (task: Task, gantt: Gantt, event: MouseEvent) => void
+            ) => {
+                const action = this.gantt.create_el({
                     classes: 'action-btn',
                     type: 'button',
                     append_to: this.actions,
                 });
-                if (typeof html === 'function') html = html(task);
-                action.innerHTML = html;
-                action.onclick = (e) => func(task, this.gantt, e);
+                if (typeof html === 'function') {
+                    action.innerHTML = html(task);
+                } else {
+                    action.innerHTML = html;
+                }
+                action.onclick = (e: MouseEvent) => func(task, this.gantt, e);
             },
         });
         if (html === false) return;
@@ -55,7 +107,7 @@ export default class Popup {
         this.parent.classList.remove('hide');
     }
 
-    hide() {
+    hide(): void {
         this.parent.classList.add('hide');
     }
 }
