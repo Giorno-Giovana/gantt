@@ -168,7 +168,7 @@ $.closest = (selector: string, element: Element | null): Element | null => {
 
 $.attr = (
     element: Element,
-    attr: string | Record<string, any>,
+    attr: string | Record<string, string | number>,
     value?: string | number
 ): string | null | undefined => {
     if (!value && typeof attr === 'string') {

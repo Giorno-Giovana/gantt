@@ -113,6 +113,26 @@ export interface GanttConfig {
     date_format?: string;
 }
 
+interface DateInfo {
+    date: Date;
+    formatted_date: string;
+    column_width: number;
+    x: number;
+    upper_text: string;
+    lower_text: string;
+    upper_y: number;
+    lower_y: number;
+}
+
+// Helper function to safely get mouse position (handles both standard and legacy properties)
+function getMouseX(e: MouseEvent): number {
+    return e.offsetX ?? (e as MouseEvent & { layerX?: number }).layerX ?? 0;
+}
+
+function getMouseY(e: MouseEvent): number {
+    return e.offsetY ?? (e as MouseEvent & { layerY?: number }).layerY ?? 0;
+}
+
 export default class Gantt {
     $svg!: SVGElement;
     $container!: HTMLElement;
@@ -988,7 +1008,7 @@ export default class Gantt {
     }
 
     make_dates() {
-        this.get_dates_to_draw().forEach((date: any, i: number) => {
+        this.get_dates_to_draw().forEach((date: DateInfo, i: number) => {
             if (date.lower_text) {
                 let $lower_text = this.create_el({
                     left: date.x,
@@ -1014,8 +1034,8 @@ export default class Gantt {
         );
     }
 
-    get_dates_to_draw() {
-        let last_date_info: any = null;
+    get_dates_to_draw(): DateInfo[] {
+        let last_date_info: DateInfo | null = null;
         const dates = this.dates.map((date: Date, i: number) => {
             const d = this.get_date_info(date, last_date_info, i);
             last_date_info = d;
@@ -1024,7 +1044,7 @@ export default class Gantt {
         return dates;
     }
 
-    get_date_info(date: Date, last_date_info?: any, i?: number) {
+    get_date_info(date: Date, last_date_info: DateInfo | null = null, i?: number): DateInfo {
         let last_date: Date | null = last_date_info ? last_date_info.date : null;
 
         let column_width = this.config.column_width!;
@@ -1050,6 +1070,9 @@ export default class Gantt {
                 date_utils.format(date, lower_text, this.options.language);
         }
 
+        const upperTextFn = this.config.view_mode!.upper_text;
+        const lowerTextFn = this.config.view_mode!.lower_text;
+
         return {
             date,
             formatted_date: sanitize(
@@ -1061,16 +1084,12 @@ export default class Gantt {
             ),
             column_width: this.config.column_width!,
             x,
-            upper_text: (this.config.view_mode!.upper_text as any)(
-                date,
-                last_date,
-                this.options.language,
-            ),
-            lower_text: (this.config.view_mode!.lower_text as any)(
-                date,
-                last_date,
-                this.options.language,
-            ),
+            upper_text: typeof upperTextFn === 'function'
+                ? upperTextFn(date, last_date, this.options.language)
+                : upperTextFn || '',
+            lower_text: typeof lowerTextFn === 'function'
+                ? lowerTextFn(date, last_date, this.options.language)
+                : lowerTextFn || '',
             upper_y: 17,
             lower_y: this.options.upper_header_height! + 5,
         };
@@ -1175,11 +1194,10 @@ export default class Gantt {
             this.config.unit!,
         );
 
-        let current_upper = (this.config.view_mode!.upper_text as any)(
-            this.current_date,
-            null,
-            this.options.language,
-        );
+        const upperTextFn2 = this.config.view_mode!.upper_text;
+        let current_upper = typeof upperTextFn2 === 'function'
+            ? upperTextFn2(this.current_date, null, this.options.language)
+            : upperTextFn2 || '';
         let $el = this.upperTexts.find(
             (el) => el.textContent === current_upper,
         );
@@ -1187,15 +1205,14 @@ export default class Gantt {
         // Recalculate
         this.current_date = date_utils.add(
             this.gantt_start,
-            (this.$container.scrollLeft + $el.clientWidth) /
+            (this.$container.scrollLeft + ($el?.clientWidth || 0)) /
                 this.config.column_width!,
             this.config.unit!,
         );
-        current_upper = (this.config.view_mode!.upper_text as any)(
-            this.current_date,
-            null,
-            this.options.language,
-        );
+        const upperTextFn2b = this.config.view_mode!.upper_text;
+        current_upper = typeof upperTextFn2b === 'function'
+            ? upperTextFn2b(this.current_date, null, this.options.language)
+            : upperTextFn2b || '';
         const foundUpperEl = this.upperTexts.find((el) => el.textContent === current_upper);
         if (foundUpperEl) {
             $el = foundUpperEl as HTMLElement;
@@ -1277,8 +1294,8 @@ export default class Gantt {
             (h as HTMLElement).onmouseenter = (e: MouseEvent) => {
                 timeout = setTimeout(() => {
                     label.classList.add('show');
-                    label.style.left = (e.offsetX || (e as any).layerX) + 'px';
-                    label.style.top = (e.offsetY || (e as any).layerY) + 'px';
+                    label.style.left = getMouseX(e) + 'px';
+                    label.style.top = getMouseY(e) + 'px';
                 }, 300);
             };
 
@@ -1322,15 +1339,19 @@ export default class Gantt {
         };
 
         let pos = 0;
-        $.on(this.$svg, 'mousemove', '.bar-wrapper, .handle', (e: any) => {
+        $.on(this.$svg, 'mousemove', '.bar-wrapper, .handle', (e: Event) => {
+            const mouseEvent = e as MouseEvent;
             if (
                 this.bar_being_dragged === false &&
-                Math.abs((e.offsetX || e.layerX) - pos) > 10
+                Math.abs(getMouseX(mouseEvent) - pos) > 10
             )
                 this.bar_being_dragged = true;
         });
 
-        $.on(this.$svg, 'mousedown', '.bar-wrapper, .handle', (e: any, element: any) => {
+        $.on(this.$svg, 'mousedown', '.bar-wrapper, .handle', (e: Event, element?: Element) => {
+            const mouseEvent = e as MouseEvent;
+            if (!element) return;
+
             const bar_wrapper = $.closest('.bar-wrapper', element);
             if (element.classList.contains('left')) {
                 is_resizing_left = true;
@@ -1344,7 +1365,7 @@ export default class Gantt {
 
             if (this.popup) this.popup.hide();
 
-            x_on_start = e.offsetX || e.layerX;
+            x_on_start = getMouseX(mouseEvent);
 
             parent_bar_id = bar_wrapper.getAttribute('data-id');
             let ids;
@@ -1372,7 +1393,7 @@ export default class Gantt {
 
         if (this.options.infinite_padding) {
             let extended = false;
-            $.on(this.$container, 'mousewheel', (e: any) => {
+            $.on(this.$container, 'mousewheel', (e: Event) => {
                 let trigger = this.$container.scrollWidth / 2;
                 if (!extended && (e.currentTarget as HTMLElement).scrollLeft <= trigger) {
                     let old_scroll_left = (e.currentTarget as HTMLElement).scrollLeft;
@@ -1413,9 +1434,9 @@ export default class Gantt {
             });
         }
 
-        $.on(this.$container, 'scroll', (e: any) => {
+        $.on(this.$container, 'scroll', (e: Event) => {
             let localBars = [];
-            const ids = this.bars.map(({ group }: any) =>
+            const ids = this.bars.map(({ group }) =>
                 group.getAttribute('data-id'),
             );
             let dx: number | undefined;
@@ -1436,8 +1457,8 @@ export default class Gantt {
                 ? upperTextFn(this.current_date, null, this.options.language)
                 : upperTextFn;
             let $el = this.upperTexts.find(
-                (el: any) => el.textContent === current_upper,
-            ) as HTMLElement;
+                (el) => el.textContent === current_upper,
+            ) as HTMLElement | undefined;
 
             // Recalculate for smoother experience
             if ($el) {
@@ -1507,9 +1528,10 @@ export default class Gantt {
             }
         });
 
-        $.on(this.$svg, 'mousemove', (e: any) => {
+        $.on(this.$svg, 'mousemove', (e: Event) => {
             if (!action_in_progress()) return;
-            const dx = (e.offsetX || e.layerX) - x_on_start;
+            const mouseEvent = e as MouseEvent;
+            const dx = getMouseX(mouseEvent) - x_on_start;
 
             bars.forEach((bar) => {
                 const $bar = bar.$bar;
@@ -1572,9 +1594,10 @@ export default class Gantt {
         let $bar_progress = null;
         let $bar = null;
 
-        $.on(this.$svg, 'mousedown', '.handle.progress', (e: any, handle: any) => {
+        $.on(this.$svg, 'mousedown', '.handle.progress', (e: Event, handle?: Element) => {
             is_resizing = true;
-            x_on_start = e.offsetX || e.layerX;
+            const mouseEvent = e as MouseEvent;
+            x_on_start = getMouseX(mouseEvent);
 
             const $bar_wrapper = $.closest('.bar-wrapper', handle);
             const id = $bar_wrapper.getAttribute('data-id');
@@ -1594,9 +1617,10 @@ export default class Gantt {
             d + this.config.column_width,
         ]);
 
-        $.on(this.$svg, 'mousemove', (e: any) => {
+        $.on(this.$svg, 'mousemove', (e: Event) => {
             if (!is_resizing) return;
-            let now_x = e.offsetX || e.layerX;
+            const mouseEvent = e as MouseEvent;
+            let now_x = getMouseX(mouseEvent);
 
             let moving_right = now_x > x_on_start;
             if (moving_right) {
