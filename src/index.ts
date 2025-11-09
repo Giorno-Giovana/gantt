@@ -9,7 +9,7 @@ import { DEFAULT_OPTIONS, DEFAULT_VIEW_MODES } from './defaults';
 
 import './styles/gantt.css';
 
-interface Task {
+export interface Task {
     id: string;
     name: string;
     start: string | Date;
@@ -23,10 +23,14 @@ interface Task {
     _index?: number;
     actual_duration?: number;
     ignored_duration?: number;
-    [key: string]: any;
+    color?: string;
+    color_progress?: string;
+    custom_class?: string;
+    thumbnail?: string;
+    invalid?: boolean;
 }
 
-interface ViewMode {
+export interface ViewMode {
     name: string;
     padding: string | string[];
     step: string;
@@ -39,7 +43,26 @@ interface ViewMode {
     upper_text_frequency?: number;
 }
 
-interface GanttOptions {
+type PopupFunction = (context: {
+    task: Task;
+    chart: Gantt;
+    get_title: () => HTMLElement;
+    set_title: (title: string) => void;
+    get_subtitle: () => HTMLElement;
+    set_subtitle: (subtitle: string) => void;
+    get_details: () => HTMLElement;
+    set_details: (details: string) => void;
+    add_action: (
+        html: string | ((task: Task) => string),
+        func: (task: Task, gantt: Gantt, event: MouseEvent) => void
+    ) => void;
+}) => string | false | void;
+
+interface HolidayConfig {
+    [color: string]: string | ((d: Date) => boolean) | Array<string | Date | { date: string; name: string } | ((d: Date) => boolean)>;
+}
+
+export interface GanttOptions {
     arrow_curve?: number;
     auto_move_label?: boolean;
     bar_corner_radius?: number;
@@ -51,13 +74,13 @@ interface GanttOptions {
     lower_header_height?: number;
     snap_at?: string | null;
     infinite_padding?: boolean;
-    holidays?: any;
-    ignore?: any;
+    holidays?: HolidayConfig;
+    ignore?: string | string[] | ((d: Date) => boolean);
     language?: string;
     lines?: string;
     move_dependencies?: boolean;
     padding?: number;
-    popup?: any;
+    popup?: PopupFunction | false;
     popup_on?: string;
     readonly_progress?: boolean;
     readonly_dates?: boolean;
@@ -67,27 +90,27 @@ interface GanttOptions {
     today_button?: boolean;
     view_mode?: string | ViewMode;
     view_mode_select?: boolean;
-    view_modes?: ViewMode[];
+    view_modes?: (ViewMode | string)[];
     is_weekend?: (d: Date) => boolean;
-    on_click?: (...args: any[]) => void;
-    on_date_change?: (...args: any[]) => void;
-    on_progress_change?: (...args: any[]) => void;
-    on_view_change?: (...args: any[]) => void;
-    [key: string]: any;
+    on_click?: (task: Task) => void;
+    on_date_change?: (task: Task, start: Date, end: Date) => void;
+    on_progress_change?: (task: Task, progress: number) => void;
+    on_view_change?: (mode: ViewMode | string) => void;
 }
 
-interface GanttConfig {
+type TimeScale = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second' | 'millisecond';
+
+export interface GanttConfig {
     ignored_dates: Date[];
     ignored_positions: number[];
     extend_by_units: number;
     ignored_function?: (d: Date) => boolean;
     view_mode?: ViewMode;
     step?: number;
-    unit?: any;
+    unit?: TimeScale;
     column_width?: number;
     header_height?: number;
     date_format?: string;
-    [key: string]: any;
 }
 
 export default class Gantt {
@@ -141,13 +164,17 @@ export default class Gantt {
                     `CSS selector "${element}" could not be found in DOM`,
                 );
             }
-            element = el as HTMLElement | SVGElement;
+            if (el instanceof HTMLElement || el instanceof SVGElement) {
+                element = el;
+            } else {
+                throw new TypeError('Selected element must be an HTML or SVG element');
+            }
         }
 
         // get the SVGElement
         if (element instanceof HTMLElement) {
             wrapper_element = element;
-            svg_element = element.querySelector('svg') as SVGElement | null;
+            svg_element = element.querySelector('svg');
         } else if (element instanceof SVGElement) {
             svg_element = element;
         } else {
@@ -170,9 +197,13 @@ export default class Gantt {
         }
 
         // wrapper element
+        const parentElement = this.$svg.parentElement;
+        if (!parentElement) {
+            throw new Error('SVG element must have a parent');
+        }
         this.$container = this.create_el({
             classes: 'gantt-container',
-            append_to: this.$svg.parentElement!,
+            append_to: parentElement,
         }) as HTMLElement;
 
         this.$container.appendChild(this.$svg);
@@ -185,35 +216,36 @@ export default class Gantt {
     setup_options(options?: GanttOptions) {
         this.original_options = options || {};
         if (options?.view_modes) {
-            options.view_modes = options.view_modes.map((mode: any) => {
+            options.view_modes = options.view_modes.map((mode: ViewMode | string) => {
                 if (typeof mode === 'string') {
                     const predefined_mode = DEFAULT_VIEW_MODES.find(
-                        (d: any) => d.name === mode,
+                        (d: ViewMode) => d.name === mode,
                     );
-                    if (!predefined_mode)
+                    if (!predefined_mode) {
                         console.error(
                             `The view mode "${mode}" is not predefined in Frappe Gantt. Please define the view mode object instead.`,
                         );
-
+                        return undefined;
+                    }
                     return predefined_mode;
                 }
                 return mode;
-            }).filter(Boolean) as ViewMode[];
+            }).filter((mode): mode is ViewMode => mode !== undefined);
             // automatically set the view mode to the first option
             if (options.view_modes && options.view_modes.length > 0) {
                 options.view_mode = options.view_modes[0];
             }
         }
         this.options = { ...DEFAULT_OPTIONS, ...options };
-        const CSS_VARIABLES = {
+        const CSS_VARIABLES: Record<string, keyof GanttOptions> = {
             'grid-height': 'container_height',
             'bar-height': 'bar_height',
             'lower-header-height': 'lower_header_height',
             'upper-header-height': 'upper_header_height',
         };
         for (let name in CSS_VARIABLES) {
-            let setting = this.options[(CSS_VARIABLES as any)[name]];
-            if (setting !== 'auto')
+            let setting = this.options[CSS_VARIABLES[name]];
+            if (setting !== 'auto' && typeof setting === 'number')
                 this.$container.style.setProperty(
                     '--gv-' + name,
                     setting + 'px',
@@ -255,28 +287,30 @@ export default class Gantt {
 
     setup_tasks(tasks: Task[]) {
         this.tasks = (tasks
-            .map((task: Task, i: number): Task | false => {
+            .map((task: Task, i: number): Task | undefined => {
                 if (!task.start) {
                     console.error(
                         `task "${task.id}" doesn't have a start date`,
                     );
-                    return false;
+                    return undefined;
                 }
 
                 task._start = date_utils.parse(task.start);
                 if (task.end === undefined && task.duration !== undefined) {
-                    task.end = task._start as Date;
+                    task.end = task._start;
                     let durations = task.duration.split(' ');
 
                     durations.forEach((tmpDuration: string) => {
-                        let { duration, scale } =
-                            date_utils.parse_duration(tmpDuration)!;
-                        task.end = date_utils.add(task.end as Date, duration, scale);
+                        const parsed = date_utils.parse_duration(tmpDuration);
+                        if (parsed && task.end) {
+                            let { duration, scale } = parsed;
+                            task.end = date_utils.add(task.end as Date, duration, scale);
+                        }
                     });
                 }
                 if (!task.end) {
                     console.error(`task "${task.id}" doesn't have an end date`);
-                    return false;
+                    return undefined;
                 }
                 task._end = date_utils.parse(task.end);
 
@@ -285,7 +319,7 @@ export default class Gantt {
                     console.error(
                         `start of task can't be after end of task: in task "${task.id}"`,
                     );
-                    return false;
+                    return undefined;
                 }
 
                 // make task invalid if duration too large
@@ -293,7 +327,7 @@ export default class Gantt {
                     console.error(
                         `the duration of task "${task.id}" is too long (above ten years)`,
                     );
-                    return false;
+                    return undefined;
                 }
 
                 // cache index
@@ -301,7 +335,7 @@ export default class Gantt {
 
                 // if hours is not set, assume the last day is full day
                 // e.g: 2018-09-09 becomes 2018-09-09 23:59:59
-                const task_end_values = date_utils.get_date_values(task._end!);
+                const task_end_values = date_utils.get_date_values(task._end);
                 if (task_end_values.slice(3).every((d: number) => d === 0)) {
                     task._end = date_utils.add(task._end, 24, 'hour');
                 }
@@ -334,14 +368,15 @@ export default class Gantt {
 
                 return task;
             })
-            .filter((t: any) => t) as Task[]);
+            .filter((t): t is Task => t !== undefined));
         this.setup_dependencies();
     }
 
     setup_dependencies() {
         this.dependency_map = {};
         for (let t of this.tasks) {
-            for (let d of t.dependencies) {
+            const dependencies = Array.isArray(t.dependencies) ? t.dependencies : [];
+            for (let d of dependencies) {
                 this.dependency_map[d] = this.dependency_map[d] || [];
                 this.dependency_map[d].push(t.id);
             }
@@ -356,14 +391,30 @@ export default class Gantt {
     update_task(id: string, new_details: Partial<Task>) {
         let task = this.tasks.find((t: Task) => t.id === id);
         if (!task) return;
-        let bar = this.bars[task._index!];
+        if (task._index === undefined) return;
+        let bar = this.bars[task._index];
         Object.assign(task, new_details);
         bar.refresh();
     }
 
-    change_view_mode(mode: string | ViewMode = this.options.view_mode!, maintain_pos: boolean = false) {
-        if (typeof mode === 'string') {
-            mode = this.options.view_modes!.find((d: ViewMode) => d.name === mode)!;
+    change_view_mode(mode?: string | ViewMode, maintain_pos: boolean = false) {
+        const viewMode = mode || this.options.view_mode;
+        if (!viewMode) {
+            throw new Error('No view mode specified');
+        }
+
+        let resolvedMode: ViewMode;
+        if (typeof viewMode === 'string') {
+            const viewModes = this.options.view_modes || [];
+            const foundMode = viewModes.find((d): d is ViewMode =>
+                typeof d !== 'string' && d.name === viewMode
+            );
+            if (!foundMode) {
+                throw new Error(`View mode "${viewMode}" not found`);
+            }
+            resolvedMode = foundMode;
+        } else {
+            resolvedMode = viewMode;
         }
         let old_pos: number | undefined, old_scroll_op: string | null | undefined;
         if (maintain_pos) {
@@ -371,20 +422,24 @@ export default class Gantt {
             old_scroll_op = this.options.scroll_to;
             this.options.scroll_to = null;
         }
-        this.options.view_mode = mode.name;
-        this.config.view_mode = mode;
-        this.update_view_scale(mode);
+        this.options.view_mode = resolvedMode.name;
+        this.config.view_mode = resolvedMode;
+        this.update_view_scale(resolvedMode);
         this.setup_dates(maintain_pos);
         this.render();
-        if (maintain_pos) {
+        if (maintain_pos && old_pos !== undefined) {
             this.$container.scrollLeft = old_pos;
             this.options.scroll_to = old_scroll_op;
         }
-        this.trigger_event('view_change', [mode]);
+        this.trigger_event('view_change', [resolvedMode]);
     }
 
     update_view_scale(mode: ViewMode) {
-        let { duration, scale } = date_utils.parse_duration(mode.step)!;
+        const parsed = date_utils.parse_duration(mode.step);
+        if (!parsed) {
+            throw new Error(`Invalid step format: ${mode.step}`);
+        }
+        let { duration, scale } = parsed;
         this.config.step = duration;
         this.config.unit = scale;
         this.config.column_width =
@@ -412,54 +467,66 @@ export default class Gantt {
         }
 
         for (let task of this.tasks) {
-            if (!gantt_start || task._start < gantt_start) {
+            if (task._start && (!gantt_start || task._start < gantt_start)) {
                 gantt_start = task._start;
             }
-            if (!gantt_end || task._end > gantt_end) {
+            if (task._end && (!gantt_end || task._end > gantt_end)) {
                 gantt_end = task._end;
             }
         }
 
-        gantt_start = date_utils.start_of(gantt_start!, this.config.unit!);
-        gantt_end = date_utils.start_of(gantt_end!, this.config.unit!);
+        if (!gantt_start || !gantt_end || !this.config.unit) {
+            throw new Error('Invalid gantt dates or unit');
+        }
+
+        gantt_start = date_utils.start_of(gantt_start, this.config.unit);
+        gantt_end = date_utils.start_of(gantt_end, this.config.unit);
 
         if (!refresh) {
             if (!this.options.infinite_padding) {
-                if (typeof this.config.view_mode.padding === 'string')
-                    this.config.view_mode.padding = [
-                        this.config.view_mode.padding,
-                        this.config.view_mode.padding,
-                    ];
+                const viewMode = this.config.view_mode;
+                if (!viewMode) throw new Error('View mode not set');
 
-                let [padding_start, padding_end] =
-                    this.config.view_mode!.padding.map(
-                        date_utils.parse_duration,
-                    );
+                if (typeof viewMode.padding === 'string') {
+                    viewMode.padding = [viewMode.padding, viewMode.padding];
+                }
+
+                const paddings = viewMode.padding.map(date_utils.parse_duration);
+                const padding_start = paddings[0];
+                const padding_end = paddings[1];
+
+                if (!padding_start || !padding_end) {
+                    throw new Error('Invalid padding configuration');
+                }
+
                 this.gantt_start = date_utils.add(
-                    gantt_start!,
-                    -padding_start!.duration,
-                    padding_start!.scale,
+                    gantt_start,
+                    -padding_start.duration,
+                    padding_start.scale,
                 );
                 this.gantt_end = date_utils.add(
-                    gantt_end!,
-                    padding_end!.duration,
-                    padding_end!.scale,
+                    gantt_end,
+                    padding_end.duration,
+                    padding_end.scale,
                 );
             } else {
+                if (!this.config.unit) throw new Error('Config unit not set');
                 this.gantt_start = date_utils.add(
-                    gantt_start!,
+                    gantt_start,
                     -this.config.extend_by_units * 3,
-                    this.config.unit!,
+                    this.config.unit,
                 );
                 this.gantt_end = date_utils.add(
-                    gantt_end!,
+                    gantt_end,
                     this.config.extend_by_units * 3,
-                    this.config.unit!,
+                    this.config.unit,
                 );
             }
         }
-        this.config.date_format =
-            this.config.view_mode!.date_format || this.options.date_format!;
+
+        const dateFormat = this.config.view_mode?.date_format || this.options.date_format;
+        if (!dateFormat) throw new Error('Date format not set');
+        this.config.date_format = dateFormat;
         this.gantt_start.setHours(0, 0, 0, 0);
     }
 
@@ -467,11 +534,15 @@ export default class Gantt {
         let cur_date = this.gantt_start;
         this.dates = [cur_date];
 
+        if (!this.config.step || !this.config.unit) {
+            throw new Error('Config step or unit not set');
+        }
+
         while (cur_date < this.gantt_end) {
             cur_date = date_utils.add(
                 cur_date,
-                this.config.step!,
-                this.config.unit!,
+                this.config.step,
+                this.config.unit,
             );
             this.dates.push(cur_date);
         }
@@ -615,11 +686,14 @@ export default class Gantt {
             $el.textContent = 'Mode';
             $select.appendChild($el);
 
-            for (const mode of this.options.view_modes) {
+            const viewModes = this.options.view_modes || [];
+            for (const mode of viewModes) {
+                if (typeof mode === 'string') continue;
                 const $option = document.createElement('option');
                 $option.value = mode.name;
                 $option.textContent = mode.name;
-                if (mode.name === this.config.view_mode.name)
+                const currentViewMode = this.config.view_mode;
+                if (currentViewMode && mode.name === currentViewMode.name)
                     $option.selected = true;
                 $select.appendChild($option);
             }
@@ -719,28 +793,36 @@ export default class Gantt {
                 check_highlight = this.options.is_weekend;
             let extra_func;
 
-            if (typeof check_highlight === 'object') {
-                let f = check_highlight.find((k: any) => typeof k === 'function');
-                if (f) {
+            if (typeof check_highlight === 'object' && Array.isArray(check_highlight)) {
+                let f = check_highlight.find((k) => typeof k === 'function');
+                if (f && typeof f === 'function') {
                     extra_func = f;
                 }
-                if ((this.options.holidays as any).name) {
-                    let dateObj = new Date(check_highlight.date + ' ');
-                    check_highlight = (d: Date) => dateObj.getTime() === d.getTime();
-                    labels[dateObj.toISOString()] = check_highlight.name;
-                } else {
-                    check_highlight = (d: Date) =>
-                        this.options.holidays![color]
-                            .filter((k: any) => typeof k !== 'function')
-                            .map((k: any) => {
-                                if (k.name) {
+                const holidayValue = this.options.holidays?.[color];
+                const isHolidayEntry = (val: unknown): val is { date: string; name: string } =>
+                    typeof val === 'object' && val !== null && 'date' in val && 'name' in val;
+
+                if (Array.isArray(holidayValue) && holidayValue.some(isHolidayEntry)) {
+                    check_highlight = (d: Date) => {
+                        if (!Array.isArray(holidayValue)) return false;
+                        return holidayValue
+                            .filter((k): k is string | Date | { date: string; name: string } => typeof k !== 'function')
+                            .map((k) => {
+                                if (isHolidayEntry(k)) {
                                     let dateObj = new Date(k.date + ' ');
                                     labels[dateObj.toISOString()] = k.name;
                                     return dateObj.getTime();
                                 }
-                                return new Date(k + ' ').getTime();
+                                if (typeof k === 'string') {
+                                    return new Date(k + ' ').getTime();
+                                }
+                                if (k instanceof Date) {
+                                    return k.getTime();
+                                }
+                                return 0;
                             })
                             .includes(d.getTime());
+                    };
                 }
             }
             for (
@@ -756,7 +838,7 @@ export default class Gantt {
                         this.config.ignored_function(d))
                 )
                     continue;
-                if (check_highlight(d) || (extra_func && extra_func(d))) {
+                if ((typeof check_highlight === 'function' && check_highlight(d)) || (extra_func && extra_func(d))) {
                     const x =
                         (date_utils.diff(
                             d,

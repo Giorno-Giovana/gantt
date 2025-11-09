@@ -1,9 +1,8 @@
-// @ts-ignore
-import { resolve, dirname } from 'path';
-// @ts-ignore
+import path from 'path';
 import { fileURLToPath } from 'url';
-// @ts-ignore
 import { defineConfig } from 'vite';
+
+const { resolve, dirname } = path;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);

@@ -71,7 +71,7 @@ export default {
                 }
                 vals = vals.concat(time_parts.map(t => parseInt(t, 10)));
             }
-            return new Date(...vals as [number, number, number, number?, number?, number?, number?]);
+            return new Date(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6]);
         }
         return new Date();
     },
@@ -201,8 +201,8 @@ export default {
     },
 
     today(): Date {
-        const vals = this.get_date_values(new Date()).slice(0, 3) as [number, number, number];
-        return new Date(...vals);
+        const vals = this.get_date_values(new Date()).slice(0, 3);
+        return new Date(vals[0], vals[1], vals[2]);
     },
 
     now(): Date {
@@ -241,19 +241,20 @@ export default {
 
         const vals: [number, number, number, number, number, number, number] = [
             date.getFullYear(),
-            should_reset(YEAR as TimeScale) ? 0 : date.getMonth(),
-            should_reset(MONTH as TimeScale) ? 1 : date.getDate(),
-            should_reset(DAY as TimeScale) ? 0 : date.getHours(),
-            should_reset(HOUR as TimeScale) ? 0 : date.getMinutes(),
-            should_reset(MINUTE as TimeScale) ? 0 : date.getSeconds(),
-            should_reset(SECOND as TimeScale) ? 0 : date.getMilliseconds(),
+            should_reset(YEAR) ? 0 : date.getMonth(),
+            should_reset(MONTH) ? 1 : date.getDate(),
+            should_reset(DAY) ? 0 : date.getHours(),
+            should_reset(HOUR) ? 0 : date.getMinutes(),
+            should_reset(MINUTE) ? 0 : date.getSeconds(),
+            should_reset(SECOND) ? 0 : date.getMilliseconds(),
         ];
 
-        return new Date(...vals);
+        return new Date(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6]);
     },
 
     clone(date: Date): Date {
-        return new Date(...this.get_date_values(date) as [number, number, number, number, number, number, number]);
+        const vals = this.get_date_values(date);
+        return new Date(vals[0], vals[1], vals[2], vals[3], vals[4], vals[5], vals[6]);
     },
 
     get_date_values(date: Date): number[] {

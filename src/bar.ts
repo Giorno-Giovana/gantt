@@ -1,5 +1,8 @@
 import date_utils from './date_utils';
 import { $, createSVG, animateSVG } from './svg_utils';
+import type Gantt from './index';
+import type { Task } from './index';
+import type Arrow from './arrow';
 
 /**
  * Extend the global SVGElement interface to include custom helper methods.
@@ -27,8 +30,8 @@ declare global {
 
 export default class Bar {
     action_completed!: boolean;
-    gantt: any;
-    task: any;
+    gantt: Gantt;
+    task: Task;
     name!: string;
     group!: SVGElement;
     bar_group!: SVGElement;
@@ -48,13 +51,13 @@ export default class Bar {
     $expected_bar_progress!: SVGElement;
     $handle_progress!: SVGElement;
     handles!: SVGElement[];
-    arrows!: any[];
+    arrows!: Arrow[];
     x!: number;
     y!: number;
     actual_duration_raw!: number;
     ignored_duration_raw!: number;
 
-    constructor(gantt: any, task: any) {
+    constructor(gantt: Gantt, task: Task) {
         this.set_defaults(gantt, task);
         this.prepare_wrappers();
         this.prepare_helpers();
@@ -75,7 +78,7 @@ export default class Bar {
         this.bind();
     }
 
-    set_defaults(gantt: any, task: any) {
+    set_defaults(gantt: Gantt, task: Task) {
         this.action_completed = false;
         this.gantt = gantt;
         this.task = task;
@@ -384,27 +387,27 @@ export default class Bar {
     setup_click_event() {
         let task_id = this.task.id;
         $.on(this.group, 'mouseover', (e: Event) => {
-            const mouseEvent = e as MouseEvent;
+            if (!(e instanceof MouseEvent)) return;
             this.gantt.trigger_event('hover', [
                 this.task,
-                mouseEvent.screenX,
-                mouseEvent.screenY,
+                e.screenX,
+                e.screenY,
                 e,
             ]);
         });
 
         if (this.gantt.options.popup_on === 'click') {
             $.on(this.group, 'mouseup', (e: Event) => {
-                const mouseEvent = e as MouseEvent;
-                const posX = mouseEvent.offsetX || mouseEvent.layerX;
+                if (!(e instanceof MouseEvent)) return;
+                const posX = e.offsetX || e.layerX;
                 if (this.$handle_progress) {
                     const cx = +(this.$handle_progress.getAttribute('cx') || 0);
                     if (cx > posX - 1 && cx < posX + 1) return;
                     if (this.gantt.bar_being_dragged) return;
                 }
                 this.gantt.show_popup({
-                    x: mouseEvent.offsetX || mouseEvent.layerX,
-                    y: mouseEvent.offsetY || mouseEvent.layerY,
+                    x: e.offsetX || e.layerX,
+                    y: e.offsetY || e.layerY,
                     task: this.task,
                     target: this.$bar,
                 });
@@ -412,27 +415,25 @@ export default class Bar {
         }
         let timeout: ReturnType<typeof setTimeout>;
         $.on(this.group, 'mouseenter', (e: Event) => {
-            const mouseEvent = e as MouseEvent;
+            if (!(e instanceof MouseEvent)) return;
             timeout = setTimeout(() => {
                 if (this.gantt.options.popup_on === 'hover')
                     this.gantt.show_popup({
-                        x: mouseEvent.offsetX || mouseEvent.layerX,
-                        y: mouseEvent.offsetY || mouseEvent.layerY,
+                        x: e.offsetX || e.layerX,
+                        y: e.offsetY || e.layerY,
                         task: this.task,
                         target: this.$bar,
                     });
-                this.gantt.$container
-                    .querySelector(`.highlight-${task_id}`)
-                    .classList.remove('hide');
+                const highlightEl = this.gantt.$container.querySelector(`.highlight-${task_id}`);
+                if (highlightEl) highlightEl.classList.remove('hide');
             }, 200);
         });
         $.on(this.group, 'mouseleave', () => {
             clearTimeout(timeout);
             if (this.gantt.options.popup_on === 'hover')
                 this.gantt.popup?.hide?.();
-            this.gantt.$container
-                .querySelector(`.highlight-${task_id}`)
-                .classList.add('hide');
+            const highlightEl = this.gantt.$container.querySelector(`.highlight-${task_id}`);
+            if (highlightEl) highlightEl.classList.add('hide');
         });
 
         $.on(this.group, 'click', () => {
@@ -478,7 +479,8 @@ export default class Bar {
         const bar = this.$bar;
 
         if (x !== null) {
-            const xs = this.task.dependencies.map((dep: any) => {
+            const dependencies = Array.isArray(this.task.dependencies) ? this.task.dependencies : [];
+            const xs = dependencies.map((dep: string) => {
                 return this.gantt.get_bar(dep).$bar.getX();
             });
             const valid_x = xs.reduce((prev: boolean, curr: number) => {
@@ -509,7 +511,7 @@ export default class Bar {
 
     update_label_position_on_horizontal_scroll({ x, sx }: { x: number; sx: number }) {
         const container = this.gantt.$container;
-        const label = this.group.querySelector('.bar-label') as SVGElement;
+        const label = this.group.querySelector('.bar-label') as SVGElement | null;
         const img = this.group.querySelector('.bar-img') as SVGElement | null;
         const img_mask = this.bar_group.querySelector('.img_mask') as SVGElement | null;
 
@@ -518,8 +520,8 @@ export default class Bar {
         let barWidthLimit = this.$bar.getX() + this.$bar.getWidth();
         let newLabelX = label.getX() + x;
         let newImgX = (img && img.getX() + x) || 0;
-        let imgWidth = (img && (img as any).getBBox().width + 7) || 7;
-        let labelEndX = newLabelX + (label as any).getBBox().width + 7;
+        let imgWidth = (img && img.getBBox().width + 7) || 7;
+        let labelEndX = newLabelX + label.getBBox().width + 7;
         let viewportCentral = sx + container.clientWidth / 2;
 
         if (label.classList.contains('big')) return;
@@ -738,14 +740,14 @@ export default class Bar {
     update_label_position() {
         const img_mask = this.bar_group.querySelector('.img_mask') as SVGElement | null;
         const bar = this.$bar;
-        const label = this.group.querySelector('.bar-label') as SVGElement;
+        const label = this.group.querySelector('.bar-label') as SVGElement | null;
         const img = this.group.querySelector('.bar-img') as SVGElement | null;
 
         if (!label) return;
 
         let padding = 5;
         let x_offset_label_img = this.image_size + 10;
-        const labelWidth = (label as any).getBBox().width;
+        const labelWidth = label.getBBox().width;
         const barWidth = bar.getWidth();
         if (labelWidth > barWidth) {
             label.classList.add('big');

@@ -1,13 +1,15 @@
 import { createSVG } from './svg_utils';
+import type Gantt from './index';
+import type Bar from './bar';
 
 export default class Arrow {
-    gantt: any;
-    from_task: any;
-    to_task: any;
+    gantt: Gantt;
+    from_task: Bar;
+    to_task: Bar;
     path!: string;
     element!: SVGElement;
 
-    constructor(gantt: any, from_task: any, to_task: any) {
+    constructor(gantt: Gantt, from_task: Bar, to_task: Bar) {
         this.gantt = gantt;
         this.from_task = from_task;
         this.to_task = to_task;
