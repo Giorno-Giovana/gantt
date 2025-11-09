@@ -1,8 +1,60 @@
 import date_utils from './date_utils';
 import { $, createSVG, animateSVG } from './svg_utils';
 
+/**
+ * Extend the global SVGElement interface to include custom helper methods.
+ *
+ * These methods are added to SVGElement.prototype at runtime in the prepare_helpers() method
+ * to provide convenient access to SVG element attributes and computed properties.
+ *
+ * Without this declaration, TypeScript would not recognize these methods and would throw
+ * type errors when calling them (e.g., this.$bar.getX()).
+ *
+ * Note: Modifying built-in prototypes is generally discouraged in modern JavaScript.
+ * A better approach would be to use standalone utility functions, but this code maintains
+ * compatibility with the existing architecture.
+ */
+declare global {
+    interface SVGElement {
+        getX(): number;
+        getY(): number;
+        getWidth(): number;
+        getHeight(): number;
+        getEndX(): number;
+        getBBox(): DOMRect;
+    }
+}
+
 export default class Bar {
-    constructor(gantt, task) {
+    action_completed!: boolean;
+    gantt: any;
+    task: any;
+    name!: string;
+    group!: SVGElement;
+    bar_group!: SVGElement;
+    handle_group!: SVGElement;
+    invalid!: boolean;
+    height!: number;
+    image_size!: number;
+    corner_radius!: number;
+    width!: number;
+    duration!: number;
+    expected_progress_width!: number;
+    expected_progress!: number;
+    $bar!: SVGElement;
+    progress_width!: number;
+    $bar_progress!: SVGElement;
+    $date_highlight!: HTMLElement;
+    $expected_bar_progress!: SVGElement;
+    $handle_progress!: SVGElement;
+    handles!: SVGElement[];
+    arrows!: any[];
+    x!: number;
+    y!: number;
+    actual_duration_raw!: number;
+    ignored_duration_raw!: number;
+
+    constructor(gantt: any, task: any) {
         this.set_defaults(gantt, task);
         this.prepare_wrappers();
         this.prepare_helpers();
@@ -15,7 +67,7 @@ export default class Bar {
         if (this.task.custom_class) {
             this.group.classList.add(this.task.custom_class);
         } else {
-            this.group.classList = ['bar-wrapper'];
+            this.group.setAttribute('class', 'bar-wrapper');
         }
 
         this.prepare_values();
@@ -23,7 +75,7 @@ export default class Bar {
         this.bind();
     }
 
-    set_defaults(gantt, task) {
+    set_defaults(gantt: any, task: any) {
         this.action_completed = false;
         this.gantt = gantt;
         this.task = task;
@@ -65,16 +117,16 @@ export default class Bar {
 
     prepare_helpers() {
         SVGElement.prototype.getX = function () {
-            return +this.getAttribute('x');
+            return +(this.getAttribute('x') || 0);
         };
         SVGElement.prototype.getY = function () {
-            return +this.getAttribute('y');
+            return +(this.getAttribute('y') || 0);
         };
         SVGElement.prototype.getWidth = function () {
-            return +this.getAttribute('width');
+            return +(this.getAttribute('width') || 0);
         };
         SVGElement.prototype.getHeight = function () {
-            return +this.getAttribute('height');
+            return +(this.getAttribute('height') || 0);
         };
         SVGElement.prototype.getEndX = function () {
             return this.getX() + this.getWidth();
@@ -186,15 +238,15 @@ export default class Bar {
         const width = this.$bar.getWidth();
         const ignored_end = this.x + width;
         const total_ignored_area =
-            this.gantt.config.ignored_positions.reduce((acc, val) => {
-                return acc + (val >= this.x && val < ignored_end);
+            this.gantt.config.ignored_positions.reduce((acc: number, val: number) => {
+                return acc + (val >= this.x && val < ignored_end ? 1 : 0);
             }, 0) * this.gantt.config.column_width;
         let progress_width =
             ((width - total_ignored_area) * this.task.progress) / 100;
         const progress_end = this.x + progress_width;
         const total_ignored_progress =
-            this.gantt.config.ignored_positions.reduce((acc, val) => {
-                return acc + (val >= this.x && val < progress_end);
+            this.gantt.config.ignored_positions.reduce((acc: number, val: number) => {
+                return acc + (val >= this.x && val < progress_end ? 1 : 0);
             }, 0) * this.gantt.config.column_width;
 
         progress_width += total_ignored_progress;
@@ -331,38 +383,41 @@ export default class Bar {
 
     setup_click_event() {
         let task_id = this.task.id;
-        $.on(this.group, 'mouseover', (e) => {
+        $.on(this.group, 'mouseover', (e: Event) => {
+            const mouseEvent = e as MouseEvent;
             this.gantt.trigger_event('hover', [
                 this.task,
-                e.screenX,
-                e.screenY,
+                mouseEvent.screenX,
+                mouseEvent.screenY,
                 e,
             ]);
         });
 
         if (this.gantt.options.popup_on === 'click') {
-            $.on(this.group, 'mouseup', (e) => {
-                const posX = e.offsetX || e.layerX;
+            $.on(this.group, 'mouseup', (e: Event) => {
+                const mouseEvent = e as MouseEvent;
+                const posX = mouseEvent.offsetX || mouseEvent.layerX;
                 if (this.$handle_progress) {
-                    const cx = +this.$handle_progress.getAttribute('cx');
+                    const cx = +(this.$handle_progress.getAttribute('cx') || 0);
                     if (cx > posX - 1 && cx < posX + 1) return;
                     if (this.gantt.bar_being_dragged) return;
                 }
                 this.gantt.show_popup({
-                    x: e.offsetX || e.layerX,
-                    y: e.offsetY || e.layerY,
+                    x: mouseEvent.offsetX || mouseEvent.layerX,
+                    y: mouseEvent.offsetY || mouseEvent.layerY,
                     task: this.task,
                     target: this.$bar,
                 });
             });
         }
-        let timeout;
-        $.on(this.group, 'mouseenter', (e) => {
+        let timeout: ReturnType<typeof setTimeout>;
+        $.on(this.group, 'mouseenter', (e: Event) => {
+            const mouseEvent = e as MouseEvent;
             timeout = setTimeout(() => {
                 if (this.gantt.options.popup_on === 'hover')
                     this.gantt.show_popup({
-                        x: e.offsetX || e.layerX,
-                        y: e.offsetY || e.layerY,
+                        x: mouseEvent.offsetX || mouseEvent.layerX,
+                        y: mouseEvent.offsetY || mouseEvent.layerY,
                         task: this.task,
                         target: this.$bar,
                     });
@@ -396,13 +451,13 @@ export default class Bar {
             this.gantt.trigger_event('double_click', [this.task]);
         });
         let tapedTwice = false;
-        $.on(this.group, 'touchstart', (e) => {
+        $.on(this.group, 'touchstart', (e: Event) => {
             if (!tapedTwice) {
                 tapedTwice = true;
                 setTimeout(function () {
                     tapedTwice = false;
                 }, 300);
-                return false;
+                return;
             }
             e.preventDefault();
             //action on double tap goes below
@@ -419,14 +474,14 @@ export default class Bar {
         });
     }
 
-    update_bar_position({ x = null, width = null }) {
+    update_bar_position({ x = null, width = null }: { x?: number | null; width?: number | null }): void {
         const bar = this.$bar;
 
-        if (x) {
-            const xs = this.task.dependencies.map((dep) => {
+        if (x !== null) {
+            const xs = this.task.dependencies.map((dep: any) => {
                 return this.gantt.get_bar(dep).$bar.getX();
             });
-            const valid_x = xs.reduce((prev, curr) => {
+            const valid_x = xs.reduce((prev: boolean, curr: number) => {
                 return prev && x >= curr;
             }, true);
             if (!valid_x) return;
@@ -434,7 +489,7 @@ export default class Bar {
             this.x = x;
             this.$date_highlight.style.left = x + 'px';
         }
-        if (width > 0) {
+        if (width !== null && width > 0) {
             this.update_attr(bar, 'width', width);
             this.$date_highlight.style.width = width + 'px';
         }
@@ -452,36 +507,38 @@ export default class Bar {
         this.update_arrow_position();
     }
 
-    update_label_position_on_horizontal_scroll({ x, sx }) {
+    update_label_position_on_horizontal_scroll({ x, sx }: { x: number; sx: number }) {
         const container = this.gantt.$container;
-        const label = this.group.querySelector('.bar-label');
-        const img = this.group.querySelector('.bar-img') || '';
-        const img_mask = this.bar_group.querySelector('.img_mask') || '';
+        const label = this.group.querySelector('.bar-label') as SVGElement;
+        const img = this.group.querySelector('.bar-img') as SVGElement | null;
+        const img_mask = this.bar_group.querySelector('.img_mask') as SVGElement | null;
+
+        if (!label) return;
 
         let barWidthLimit = this.$bar.getX() + this.$bar.getWidth();
         let newLabelX = label.getX() + x;
         let newImgX = (img && img.getX() + x) || 0;
-        let imgWidth = (img && img.getBBox().width + 7) || 7;
-        let labelEndX = newLabelX + label.getBBox().width + 7;
+        let imgWidth = (img && (img as any).getBBox().width + 7) || 7;
+        let labelEndX = newLabelX + (label as any).getBBox().width + 7;
         let viewportCentral = sx + container.clientWidth / 2;
 
         if (label.classList.contains('big')) return;
 
         if (labelEndX < barWidthLimit && x > 0 && labelEndX < viewportCentral) {
-            label.setAttribute('x', newLabelX);
-            if (img) {
-                img.setAttribute('x', newImgX);
-                img_mask.setAttribute('x', newImgX);
+            label.setAttribute('x', newLabelX.toString());
+            if (img && img_mask) {
+                img.setAttribute('x', newImgX.toString());
+                img_mask.setAttribute('x', newImgX.toString());
             }
         } else if (
             newLabelX - imgWidth > this.$bar.getX() &&
             x < 0 &&
             labelEndX > viewportCentral
         ) {
-            label.setAttribute('x', newLabelX);
-            if (img) {
-                img.setAttribute('x', newImgX);
-                img_mask.setAttribute('x', newImgX);
+            label.setAttribute('x', newLabelX.toString());
+            if (img && img_mask) {
+                img.setAttribute('x', newImgX.toString());
+                img_mask.setAttribute('x', newImgX.toString());
             }
         }
     }
@@ -546,15 +603,15 @@ export default class Bar {
         const progress_area = this.x + this.progress_width;
         const progress =
             this.progress_width -
-            this.gantt.config.ignored_positions.reduce((acc, val) => {
-                return acc + (val >= this.x && val <= progress_area);
+            this.gantt.config.ignored_positions.reduce((acc: number, val: number) => {
+                return acc + (val >= this.x && val <= progress_area ? 1 : 0);
             }, 0) *
                 this.gantt.config.column_width;
         if (progress < 0) return 0;
         const total =
             this.$bar.getWidth() -
             this.ignored_duration_raw * this.gantt.config.column_width;
-        return parseInt((progress / total) * 100, 10);
+        return parseInt(((progress / total) * 100).toString(), 10);
     }
 
     compute_expected_progress() {
@@ -622,7 +679,7 @@ export default class Bar {
             duration_in_days++;
             if (
                 !this.gantt.config.ignored_dates.find(
-                    (k) => k.getTime() === d.getTime(),
+                    (k: Date) => k.getTime() === d.getTime(),
                 ) &&
                 (!this.gantt.config.ignored_function ||
                     !this.gantt.config.ignored_function(d))
@@ -648,68 +705,70 @@ export default class Bar {
         this.ignored_duration_raw = this.duration - this.actual_duration_raw;
     }
 
-    update_attr(element, attr, value) {
+    update_attr(element: SVGElement, attr: string, value: number | string) {
         value = +value;
         if (!isNaN(value)) {
-            element.setAttribute(attr, value);
+            element.setAttribute(attr, value.toString());
         }
         return element;
     }
 
     update_expected_progressbar_position() {
         if (this.invalid) return;
-        this.$expected_bar_progress.setAttribute('x', this.$bar.getX());
+        this.$expected_bar_progress.setAttribute('x', this.$bar.getX().toString());
         this.compute_expected_progress();
         this.$expected_bar_progress.setAttribute(
             'width',
-            this.gantt.config.column_width *
+            (this.gantt.config.column_width *
                 this.actual_duration_raw *
-                (this.expected_progress / 100) || 0,
+                (this.expected_progress / 100) || 0).toString(),
         );
     }
 
     update_progressbar_position() {
         if (this.invalid || this.gantt.options.readonly) return;
-        this.$bar_progress.setAttribute('x', this.$bar.getX());
+        this.$bar_progress.setAttribute('x', this.$bar.getX().toString());
 
         this.$bar_progress.setAttribute(
             'width',
-            this.calculate_progress_width(),
+            this.calculate_progress_width().toString(),
         );
     }
 
     update_label_position() {
-        const img_mask = this.bar_group.querySelector('.img_mask') || '';
-        const bar = this.$bar,
-            label = this.group.querySelector('.bar-label'),
-            img = this.group.querySelector('.bar-img');
+        const img_mask = this.bar_group.querySelector('.img_mask') as SVGElement | null;
+        const bar = this.$bar;
+        const label = this.group.querySelector('.bar-label') as SVGElement;
+        const img = this.group.querySelector('.bar-img') as SVGElement | null;
+
+        if (!label) return;
 
         let padding = 5;
         let x_offset_label_img = this.image_size + 10;
-        const labelWidth = label.getBBox().width;
+        const labelWidth = (label as any).getBBox().width;
         const barWidth = bar.getWidth();
         if (labelWidth > barWidth) {
             label.classList.add('big');
-            if (img) {
-                img.setAttribute('x', bar.getEndX() + padding);
-                img_mask.setAttribute('x', bar.getEndX() + padding);
-                label.setAttribute('x', bar.getEndX() + x_offset_label_img);
+            if (img && img_mask) {
+                img.setAttribute('x', (bar.getEndX() + padding).toString());
+                img_mask.setAttribute('x', (bar.getEndX() + padding).toString());
+                label.setAttribute('x', (bar.getEndX() + x_offset_label_img).toString());
             } else {
-                label.setAttribute('x', bar.getEndX() + padding);
+                label.setAttribute('x', (bar.getEndX() + padding).toString());
             }
         } else {
             label.classList.remove('big');
-            if (img) {
-                img.setAttribute('x', bar.getX() + padding);
-                img_mask.setAttribute('x', bar.getX() + padding);
+            if (img && img_mask) {
+                img.setAttribute('x', (bar.getX() + padding).toString());
+                img_mask.setAttribute('x', (bar.getX() + padding).toString());
                 label.setAttribute(
                     'x',
-                    bar.getX() + barWidth / 2 + x_offset_label_img,
+                    (bar.getX() + barWidth / 2 + x_offset_label_img).toString(),
                 );
             } else {
                 label.setAttribute(
                     'x',
-                    bar.getX() + barWidth / 2 - labelWidth / 2,
+                    (bar.getX() + barWidth / 2 - labelWidth / 2).toString(),
                 );
             }
         }
@@ -718,14 +777,18 @@ export default class Bar {
     update_handle_position() {
         if (this.invalid || this.gantt.options.readonly) return;
         const bar = this.$bar;
-        this.handle_group
-            .querySelector('.handle.left')
-            .setAttribute('x', bar.getX());
-        this.handle_group
-            .querySelector('.handle.right')
-            .setAttribute('x', bar.getEndX());
+        const leftHandle = this.handle_group.querySelector('.handle.left');
+        const rightHandle = this.handle_group.querySelector('.handle.right');
+        if (leftHandle) {
+            leftHandle.setAttribute('x', bar.getX().toString());
+        }
+        if (rightHandle) {
+            rightHandle.setAttribute('x', bar.getEndX().toString());
+        }
         const handle = this.group.querySelector('.handle.progress');
-        handle && handle.setAttribute('cx', this.$bar_progress.getEndX());
+        if (handle) {
+            handle.setAttribute('cx', this.$bar_progress.getEndX().toString());
+        }
     }
 
     update_arrow_position() {
