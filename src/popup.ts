@@ -29,20 +29,24 @@ export default class Popup {
     parent: HTMLElement;
     popup_func: PopupFunction;
     gantt: Gantt;
-    title!: HTMLElement;
-    subtitle!: HTMLElement;
-    details!: HTMLElement;
-    actions!: HTMLElement;
+    title: HTMLElement;
+    subtitle: HTMLElement;
+    details: HTMLElement;
+    actions: HTMLElement;
 
     constructor(parent: HTMLElement, popup_func: PopupFunction, gantt: Gantt) {
         this.parent = parent;
         this.popup_func = popup_func;
         this.gantt = gantt;
 
-        this.make();
+        const elements = this.make();
+        this.title = elements.title;
+        this.subtitle = elements.subtitle;
+        this.details = elements.details;
+        this.actions = elements.actions;
     }
 
-    make(): void {
+    make(): { title: HTMLElement; subtitle: HTMLElement; details: HTMLElement; actions: HTMLElement } {
         this.parent.innerHTML = `
             <div class="title"></div>
             <div class="subtitle"></div>
@@ -63,10 +67,7 @@ export default class Popup {
             throw new Error('Failed to create popup elements');
         }
 
-        this.title = title;
-        this.subtitle = subtitle;
-        this.details = details;
-        this.actions = actions;
+        return { title, subtitle, details, actions };
     }
 
     show({ x, y, task, target }: ShowOptions): void {

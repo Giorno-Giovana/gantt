@@ -29,35 +29,48 @@ declare global {
 }
 
 export default class Bar {
-    action_completed!: boolean;
+    action_completed: boolean = false;
     gantt: Gantt;
     task: Task;
-    name!: string;
-    group!: SVGElement;
-    bar_group!: SVGElement;
-    handle_group!: SVGElement;
-    invalid!: boolean;
-    height!: number;
-    image_size!: number;
-    corner_radius!: number;
-    width!: number;
-    duration!: number;
-    expected_progress_width!: number;
-    expected_progress!: number;
-    $bar!: SVGElement;
-    progress_width!: number;
-    $bar_progress!: SVGElement;
-    $date_highlight!: HTMLElement;
-    $expected_bar_progress!: SVGElement;
-    $handle_progress!: SVGElement;
-    handles!: SVGElement[];
-    arrows!: Arrow[];
-    x!: number;
-    y!: number;
-    actual_duration_raw!: number;
-    ignored_duration_raw!: number;
+    name: string = '';
+    group: SVGElement;
+    bar_group: SVGElement;
+    handle_group: SVGElement;
+    invalid: boolean = false;
+    height: number = 0;
+    image_size: number = 0;
+    corner_radius: number = 0;
+    width: number = 0;
+    duration: number = 0;
+    expected_progress_width: number = 0;
+    expected_progress: number = 0;
+    $bar: SVGElement;
+    progress_width: number = 0;
+    $bar_progress: SVGElement;
+    $date_highlight: HTMLElement;
+    $expected_bar_progress: SVGElement;
+    $handle_progress: SVGElement;
+    handles: SVGElement[] = [];
+    arrows: Arrow[] = [];
+    x: number = 0;
+    y: number = 0;
+    actual_duration_raw: number = 0;
+    ignored_duration_raw: number = 0;
 
     constructor(gantt: Gantt, task: Task) {
+        this.gantt = gantt;
+        this.task = task;
+
+        // Initialize SVG elements - these will be properly set in prepare_wrappers and draw
+        this.group = createSVG('g', {});
+        this.bar_group = createSVG('g', {});
+        this.handle_group = createSVG('g', {});
+        this.$bar = createSVG('rect', {});
+        this.$bar_progress = createSVG('rect', {});
+        this.$expected_bar_progress = createSVG('rect', {});
+        this.$handle_progress = createSVG('circle', {});
+        this.$date_highlight = document.createElement('div');
+
         this.set_defaults(gantt, task);
         this.prepare_wrappers();
         this.prepare_helpers();
@@ -511,16 +524,16 @@ export default class Bar {
 
     update_label_position_on_horizontal_scroll({ x, sx }: { x: number; sx: number }) {
         const container = this.gantt.$container;
-        const label = this.group.querySelector('.bar-label') as SVGElement | null;
-        const img = this.group.querySelector('.bar-img') as SVGElement | null;
-        const img_mask = this.bar_group.querySelector('.img_mask') as SVGElement | null;
+        const label = this.group.querySelector('.bar-label');
+        const img = this.group.querySelector('.bar-img');
+        const img_mask = this.bar_group.querySelector('.img_mask');
 
-        if (!label) return;
+        if (!(label instanceof SVGElement)) return;
 
         let barWidthLimit = this.$bar.getX() + this.$bar.getWidth();
         let newLabelX = label.getX() + x;
-        let newImgX = (img && img.getX() + x) || 0;
-        let imgWidth = (img && img.getBBox().width + 7) || 7;
+        let newImgX = (img instanceof SVGElement && img.getX() + x) || 0;
+        let imgWidth = (img instanceof SVGElement && img.getBBox().width + 7) || 7;
         let labelEndX = newLabelX + label.getBBox().width + 7;
         let viewportCentral = sx + container.clientWidth / 2;
 
@@ -528,7 +541,7 @@ export default class Bar {
 
         if (labelEndX < barWidthLimit && x > 0 && labelEndX < viewportCentral) {
             label.setAttribute('x', newLabelX.toString());
-            if (img && img_mask) {
+            if (img instanceof SVGElement && img_mask instanceof SVGElement) {
                 img.setAttribute('x', newImgX.toString());
                 img_mask.setAttribute('x', newImgX.toString());
             }
@@ -538,7 +551,7 @@ export default class Bar {
             labelEndX > viewportCentral
         ) {
             label.setAttribute('x', newLabelX.toString());
-            if (img && img_mask) {
+            if (img instanceof SVGElement && img_mask instanceof SVGElement) {
                 img.setAttribute('x', newImgX.toString());
                 img_mask.setAttribute('x', newImgX.toString());
             }
@@ -738,12 +751,12 @@ export default class Bar {
     }
 
     update_label_position() {
-        const img_mask = this.bar_group.querySelector('.img_mask') as SVGElement | null;
+        const img_mask = this.bar_group.querySelector('.img_mask');
         const bar = this.$bar;
-        const label = this.group.querySelector('.bar-label') as SVGElement | null;
-        const img = this.group.querySelector('.bar-img') as SVGElement | null;
+        const label = this.group.querySelector('.bar-label');
+        const img = this.group.querySelector('.bar-img');
 
-        if (!label) return;
+        if (!(label instanceof SVGElement)) return;
 
         let padding = 5;
         let x_offset_label_img = this.image_size + 10;
@@ -751,7 +764,7 @@ export default class Bar {
         const barWidth = bar.getWidth();
         if (labelWidth > barWidth) {
             label.classList.add('big');
-            if (img && img_mask) {
+            if (img instanceof SVGElement && img_mask instanceof SVGElement) {
                 img.setAttribute('x', (bar.getEndX() + padding).toString());
                 img_mask.setAttribute('x', (bar.getEndX() + padding).toString());
                 label.setAttribute('x', (bar.getEndX() + x_offset_label_img).toString());
@@ -760,7 +773,7 @@ export default class Bar {
             }
         } else {
             label.classList.remove('big');
-            if (img && img_mask) {
+            if (img instanceof SVGElement && img_mask instanceof SVGElement) {
                 img.setAttribute('x', (bar.getX() + padding).toString());
                 img_mask.setAttribute('x', (bar.getX() + padding).toString());
                 label.setAttribute(

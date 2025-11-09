@@ -135,7 +135,8 @@ $.off = (element: Element, event: string, handler: EventListener): void => {
 
 $.bind = (element: Element, event: string, callback: EventCallback): void => {
     event.split(/\s+/).forEach(function (eventName) {
-        element.addEventListener(eventName, callback as EventListener);
+        const listener: EventListener = (e: Event) => callback(e);
+        element.addEventListener(eventName, listener);
     });
 };
 
