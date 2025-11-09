@@ -41,6 +41,7 @@ export default {
                 return { duration: parseInt(matches[1]), scale: `millisecond` };
             }
         }
+        return undefined;
     },
     parse(
         date: Date | string,
@@ -51,26 +52,26 @@ export default {
             return date;
         }
         if (typeof date === 'string') {
-            let date_parts: number[], time_parts: string[] | undefined;
+            let date_parts: number[];
             const parts = date.split(' ');
             date_parts = parts[0]
                 .split(date_separator)
                 .map((val) => parseInt(val, 10));
-            time_parts = parts[1] && parts[1].split(time_separator);
+            const time_parts: string[] | undefined = parts[1] ? parts[1].split(time_separator) : undefined;
 
             // month is 0 indexed
             date_parts[1] = date_parts[1] ? date_parts[1] - 1 : 0;
 
-            let vals: any[] = date_parts;
+            let vals: number[] = date_parts;
 
             if (time_parts && time_parts.length) {
                 if (time_parts.length === 4) {
                     time_parts[3] = '0.' + time_parts[3];
                     time_parts[3] = String(parseFloat(time_parts[3]) * 1000);
                 }
-                vals = vals.concat(time_parts);
+                vals = vals.concat(time_parts.map(t => parseInt(t, 10)));
             }
-            return new Date(...vals);
+            return new Date(...vals as [number, number, number, number?, number?, number?, number?]);
         }
         return new Date();
     },
@@ -135,13 +136,13 @@ export default {
             .sort((a, b) => b.length - a.length) // big string first
             .forEach((key) => {
                 if (str.includes(key)) {
-                    str = str.replaceAll(key, `$${formatted_values.length}`);
+                    str = str.replace(new RegExp(key, 'g'), `$${formatted_values.length}`);
                     formatted_values.push(format_map[key]);
                 }
             });
 
         formatted_values.forEach((value, i) => {
-            str = str.replaceAll(`$${i}`, value);
+            str = str.replace(new RegExp(`\\$${i}`, 'g'), value);
         });
 
         return str;
@@ -200,7 +201,7 @@ export default {
     },
 
     today(): Date {
-        const vals = this.get_date_values(new Date()).slice(0, 3);
+        const vals = this.get_date_values(new Date()).slice(0, 3) as [number, number, number];
         return new Date(...vals);
     },
 
@@ -210,7 +211,7 @@ export default {
 
     add(date: Date, qty: number | string, scale: TimeScale): Date {
         qty = parseInt(String(qty), 10);
-        const vals = [
+        const vals: [number, number, number, number, number, number, number] = [
             date.getFullYear() + (scale === YEAR ? qty : 0),
             date.getMonth() + (scale === MONTH ? qty : 0),
             date.getDate() + (scale === DAY ? qty : 0),
@@ -238,7 +239,7 @@ export default {
             return scores[_scale] <= max_score;
         }
 
-        const vals = [
+        const vals: [number, number, number, number, number, number, number] = [
             date.getFullYear(),
             should_reset(YEAR as TimeScale) ? 0 : date.getMonth(),
             should_reset(MONTH as TimeScale) ? 1 : date.getDate(),
@@ -252,7 +253,7 @@ export default {
     },
 
     clone(date: Date): Date {
-        return new Date(...this.get_date_values(date));
+        return new Date(...this.get_date_values(date) as [number, number, number, number, number, number, number]);
     },
 
     get_date_values(date: Date): number[] {

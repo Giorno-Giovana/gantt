@@ -9,8 +9,120 @@ import { DEFAULT_OPTIONS, DEFAULT_VIEW_MODES } from './defaults';
 
 import './styles/gantt.css';
 
+interface Task {
+    id: string;
+    name: string;
+    start: string | Date;
+    end?: string | Date;
+    duration?: string;
+    progress?: number;
+    dependencies?: string | string[];
+    description?: string;
+    _start?: Date;
+    _end?: Date;
+    _index?: number;
+    actual_duration?: number;
+    ignored_duration?: number;
+    [key: string]: any;
+}
+
+interface ViewMode {
+    name: string;
+    padding: string | string[];
+    step: string;
+    date_format?: string;
+    lower_text?: string | ((d: Date, ld: Date | null, lang: string) => string);
+    upper_text?: string | ((d: Date, ld: Date | null, lang: string) => string);
+    thick_line?: (d: Date) => boolean;
+    snap_at?: string;
+    column_width?: number;
+    upper_text_frequency?: number;
+}
+
+interface GanttOptions {
+    arrow_curve?: number;
+    auto_move_label?: boolean;
+    bar_corner_radius?: number;
+    bar_height?: number;
+    container_height?: number | string;
+    column_width?: number | null;
+    date_format?: string;
+    upper_header_height?: number;
+    lower_header_height?: number;
+    snap_at?: string | null;
+    infinite_padding?: boolean;
+    holidays?: any;
+    ignore?: any;
+    language?: string;
+    lines?: string;
+    move_dependencies?: boolean;
+    padding?: number;
+    popup?: any;
+    popup_on?: string;
+    readonly_progress?: boolean;
+    readonly_dates?: boolean;
+    readonly?: boolean;
+    scroll_to?: string | null;
+    show_expected_progress?: boolean;
+    today_button?: boolean;
+    view_mode?: string | ViewMode;
+    view_mode_select?: boolean;
+    view_modes?: ViewMode[];
+    is_weekend?: (d: Date) => boolean;
+    on_click?: (...args: any[]) => void;
+    on_date_change?: (...args: any[]) => void;
+    on_progress_change?: (...args: any[]) => void;
+    on_view_change?: (...args: any[]) => void;
+    [key: string]: any;
+}
+
+interface GanttConfig {
+    ignored_dates: Date[];
+    ignored_positions: number[];
+    extend_by_units: number;
+    ignored_function?: (d: Date) => boolean;
+    view_mode?: ViewMode;
+    step?: number;
+    unit?: any;
+    column_width?: number;
+    header_height?: number;
+    date_format?: string;
+    [key: string]: any;
+}
+
 export default class Gantt {
-    constructor(wrapper, tasks, options) {
+    $svg!: SVGElement;
+    $container!: HTMLElement;
+    $popup_wrapper!: HTMLElement;
+    $header!: HTMLElement;
+    $upper_header!: HTMLElement;
+    $lower_header!: HTMLElement;
+    $side_header!: HTMLElement;
+    $today_button?: HTMLElement;
+    $extras!: HTMLElement;
+    $adjust!: HTMLElement;
+    $current_highlight?: HTMLElement;
+    $current_ball_highlight?: HTMLElement;
+    $current?: HTMLElement;
+
+    options!: GanttOptions;
+    original_options!: GanttOptions;
+    config!: GanttConfig;
+    tasks!: Task[];
+    dates!: Date[];
+    gantt_start!: Date;
+    gantt_end!: Date;
+    grid_height!: number;
+    layers!: Record<string, SVGElement>;
+    bars!: Bar[];
+    arrows!: Arrow[];
+    popup?: Popup;
+    dependency_map!: Record<string, string[]>;
+    bar_being_dragged: boolean | null = null;
+    current_date!: Date;
+    upperTexts!: Element[];
+
+    constructor(wrapper: string | HTMLElement | SVGElement, tasks: Task[], options?: GanttOptions) {
         this.setup_wrapper(wrapper);
         this.setup_options(options);
         this.setup_tasks(tasks);
@@ -18,7 +130,7 @@ export default class Gantt {
         this.bind_events();
     }
 
-    setup_wrapper(element) {
+    setup_wrapper(element: string | HTMLElement | SVGElement) {
         let svg_element, wrapper_element;
 
         // CSS Selector is passed
@@ -29,13 +141,13 @@ export default class Gantt {
                     `CSS selector "${element}" could not be found in DOM`,
                 );
             }
-            element = el;
+            element = el as HTMLElement | SVGElement;
         }
 
         // get the SVGElement
         if (element instanceof HTMLElement) {
             wrapper_element = element;
-            svg_element = element.querySelector('svg');
+            svg_element = element.querySelector('svg') as SVGElement | null;
         } else if (element instanceof SVGElement) {
             svg_element = element;
         } else {
@@ -60,23 +172,23 @@ export default class Gantt {
         // wrapper element
         this.$container = this.create_el({
             classes: 'gantt-container',
-            append_to: this.$svg.parentElement,
-        });
+            append_to: this.$svg.parentElement!,
+        }) as HTMLElement;
 
         this.$container.appendChild(this.$svg);
         this.$popup_wrapper = this.create_el({
             classes: 'popup-wrapper',
             append_to: this.$container,
-        });
+        }) as HTMLElement;
     }
 
-    setup_options(options) {
-        this.original_options = options;
+    setup_options(options?: GanttOptions) {
+        this.original_options = options || {};
         if (options?.view_modes) {
-            options.view_modes = options.view_modes.map((mode) => {
+            options.view_modes = options.view_modes.map((mode: any) => {
                 if (typeof mode === 'string') {
                     const predefined_mode = DEFAULT_VIEW_MODES.find(
-                        (d) => d.name === mode,
+                        (d: any) => d.name === mode,
                     );
                     if (!predefined_mode)
                         console.error(
@@ -86,9 +198,11 @@ export default class Gantt {
                     return predefined_mode;
                 }
                 return mode;
-            });
+            }).filter(Boolean) as ViewMode[];
             // automatically set the view mode to the first option
-            options.view_mode = options.view_modes[0];
+            if (options.view_modes && options.view_modes.length > 0) {
+                options.view_mode = options.view_modes[0];
+            }
         }
         this.options = { ...DEFAULT_OPTIONS, ...options };
         const CSS_VARIABLES = {
@@ -98,7 +212,7 @@ export default class Gantt {
             'upper-header-height': 'upper_header_height',
         };
         for (let name in CSS_VARIABLES) {
-            let setting = this.options[CSS_VARIABLES[name]];
+            let setting = this.options[(CSS_VARIABLES as any)[name]];
             if (setting !== 'auto')
                 this.$container.style.setProperty(
                     '--gv-' + name,
@@ -121,10 +235,12 @@ export default class Gantt {
                     continue;
                 }
                 if (typeof option === 'string') {
-                    if (option === 'weekend')
-                        this.config.ignored_function = (d) =>
+                    if (option === 'weekend') {
+                        this.config.ignored_function = (d: Date) =>
                             d.getDay() == 6 || d.getDay() == 0;
-                    else this.config.ignored_dates.push(new Date(option + ' '));
+                    } else {
+                        this.config.ignored_dates.push(new Date(option + ' '));
+                    }
                 }
             }
         } else {
@@ -132,14 +248,14 @@ export default class Gantt {
         }
     }
 
-    update_options(options) {
+    update_options(options: GanttOptions) {
         this.setup_options({ ...this.original_options, ...options });
         this.change_view_mode(undefined, true);
     }
 
-    setup_tasks(tasks) {
-        this.tasks = tasks
-            .map((task, i) => {
+    setup_tasks(tasks: Task[]) {
+        this.tasks = (tasks
+            .map((task: Task, i: number): Task | false => {
                 if (!task.start) {
                     console.error(
                         `task "${task.id}" doesn't have a start date`,
@@ -149,13 +265,13 @@ export default class Gantt {
 
                 task._start = date_utils.parse(task.start);
                 if (task.end === undefined && task.duration !== undefined) {
-                    task.end = task._start;
+                    task.end = task._start as Date;
                     let durations = task.duration.split(' ');
 
-                    durations.forEach((tmpDuration) => {
+                    durations.forEach((tmpDuration: string) => {
                         let { duration, scale } =
-                            date_utils.parse_duration(tmpDuration);
-                        task.end = date_utils.add(task.end, duration, scale);
+                            date_utils.parse_duration(tmpDuration)!;
+                        task.end = date_utils.add(task.end as Date, duration, scale);
                     });
                 }
                 if (!task.end) {
@@ -185,8 +301,8 @@ export default class Gantt {
 
                 // if hours is not set, assume the last day is full day
                 // e.g: 2018-09-09 becomes 2018-09-09 23:59:59
-                const task_end_values = date_utils.get_date_values(task._end);
-                if (task_end_values.slice(3).every((d) => d === 0)) {
+                const task_end_values = date_utils.get_date_values(task._end!);
+                if (task_end_values.slice(3).every((d: number) => d === 0)) {
                     task._end = date_utils.add(task._end, 24, 'hour');
                 }
 
@@ -195,12 +311,14 @@ export default class Gantt {
                     typeof task.dependencies === 'string' ||
                     !task.dependencies
                 ) {
-                    let deps = [];
+                    let deps: string[] = [];
                     if (task.dependencies) {
-                        deps = task.dependencies
-                            .split(',')
-                            .map((d) => d.trim().replaceAll(' ', '_'))
-                            .filter((d) => d);
+                        if (typeof task.dependencies === 'string') {
+                            deps = task.dependencies
+                                .split(',')
+                                .map((d: string) => d.trim().replace(/ /g, '_'))
+                                .filter((d: string) => d);
+                        }
                     }
                     task.dependencies = deps;
                 }
@@ -209,14 +327,14 @@ export default class Gantt {
                 if (!task.id) {
                     task.id = generate_id(task);
                 } else if (typeof task.id === 'string') {
-                    task.id = task.id.replaceAll(' ', '_');
+                    task.id = task.id.replace(/ /g, '_');
                 } else {
                     task.id = `${task.id}`;
                 }
 
                 return task;
             })
-            .filter((t) => t);
+            .filter((t: any) => t) as Task[]);
         this.setup_dependencies();
     }
 
@@ -230,23 +348,24 @@ export default class Gantt {
         }
     }
 
-    refresh(tasks) {
+    refresh(tasks: Task[]) {
         this.setup_tasks(tasks);
         this.change_view_mode();
     }
 
-    update_task(id, new_details) {
-        let task = this.tasks.find((t) => t.id === id);
-        let bar = this.bars[task._index];
+    update_task(id: string, new_details: Partial<Task>) {
+        let task = this.tasks.find((t: Task) => t.id === id);
+        if (!task) return;
+        let bar = this.bars[task._index!];
         Object.assign(task, new_details);
         bar.refresh();
     }
 
-    change_view_mode(mode = this.options.view_mode, maintain_pos = false) {
+    change_view_mode(mode: string | ViewMode = this.options.view_mode!, maintain_pos: boolean = false) {
         if (typeof mode === 'string') {
-            mode = this.options.view_modes.find((d) => d.name === mode);
+            mode = this.options.view_modes!.find((d: ViewMode) => d.name === mode)!;
         }
-        let old_pos, old_scroll_op;
+        let old_pos: number | undefined, old_scroll_op: string | null | undefined;
         if (maintain_pos) {
             old_pos = this.$container.scrollLeft;
             old_scroll_op = this.options.scroll_to;
@@ -264,8 +383,8 @@ export default class Gantt {
         this.trigger_event('view_change', [mode]);
     }
 
-    update_view_scale(mode) {
-        let { duration, scale } = date_utils.parse_duration(mode.step);
+    update_view_scale(mode: ViewMode) {
+        let { duration, scale } = date_utils.parse_duration(mode.step)!;
         this.config.step = duration;
         this.config.unit = scale;
         this.config.column_width =
@@ -275,18 +394,18 @@ export default class Gantt {
             this.config.column_width + 'px',
         );
         this.config.header_height =
-            this.options.lower_header_height +
-            this.options.upper_header_height +
+            (this.options.lower_header_height || 30) +
+            (this.options.upper_header_height || 45) +
             10;
     }
 
-    setup_dates(refresh = false) {
+    setup_dates(refresh: boolean = false) {
         this.setup_gantt_dates(refresh);
         this.setup_date_values();
     }
 
-    setup_gantt_dates(refresh) {
-        let gantt_start, gantt_end;
+    setup_gantt_dates(refresh: boolean) {
+        let gantt_start: Date | undefined, gantt_end: Date | undefined;
         if (!this.tasks.length) {
             gantt_start = new Date();
             gantt_end = new Date();
@@ -301,8 +420,8 @@ export default class Gantt {
             }
         }
 
-        gantt_start = date_utils.start_of(gantt_start, this.config.unit);
-        gantt_end = date_utils.start_of(gantt_end, this.config.unit);
+        gantt_start = date_utils.start_of(gantt_start!, this.config.unit!);
+        gantt_end = date_utils.start_of(gantt_end!, this.config.unit!);
 
         if (!refresh) {
             if (!this.options.infinite_padding) {
@@ -313,34 +432,34 @@ export default class Gantt {
                     ];
 
                 let [padding_start, padding_end] =
-                    this.config.view_mode.padding.map(
+                    this.config.view_mode!.padding.map(
                         date_utils.parse_duration,
                     );
                 this.gantt_start = date_utils.add(
-                    gantt_start,
-                    -padding_start.duration,
-                    padding_start.scale,
+                    gantt_start!,
+                    -padding_start!.duration,
+                    padding_start!.scale,
                 );
                 this.gantt_end = date_utils.add(
-                    gantt_end,
-                    padding_end.duration,
-                    padding_end.scale,
+                    gantt_end!,
+                    padding_end!.duration,
+                    padding_end!.scale,
                 );
             } else {
                 this.gantt_start = date_utils.add(
-                    gantt_start,
+                    gantt_start!,
                     -this.config.extend_by_units * 3,
-                    this.config.unit,
+                    this.config.unit!,
                 );
                 this.gantt_end = date_utils.add(
-                    gantt_end,
+                    gantt_end!,
                     this.config.extend_by_units * 3,
-                    this.config.unit,
+                    this.config.unit!,
                 );
             }
         }
         this.config.date_format =
-            this.config.view_mode.date_format || this.options.date_format;
+            this.config.view_mode!.date_format || this.options.date_format!;
         this.gantt_start.setHours(0, 0, 0, 0);
     }
 
@@ -351,8 +470,8 @@ export default class Gantt {
         while (cur_date < this.gantt_end) {
             cur_date = date_utils.add(
                 cur_date,
-                this.config.step,
-                this.config.unit,
+                this.config.step!,
+                this.config.unit!,
             );
             this.dates.push(cur_date);
         }
@@ -412,15 +531,15 @@ export default class Gantt {
     }
 
     make_grid_background() {
-        const grid_width = this.dates.length * this.config.column_width;
+        const grid_width = this.dates.length * this.config.column_width!;
         const grid_height = Math.max(
-            this.config.header_height +
-                this.options.padding +
-                (this.options.bar_height + this.options.padding) *
+            this.config.header_height! +
+                this.options.padding! +
+                (this.options.bar_height! + this.options.padding!) *
                     this.tasks.length -
                 10,
             this.options.container_height !== 'auto'
-                ? this.options.container_height
+                ? (this.options.container_height as number)
                 : 0,
         );
 
@@ -445,12 +564,11 @@ export default class Gantt {
     make_grid_rows() {
         const rows_layer = createSVG('g', { append_to: this.layers.grid });
 
-        const row_width = this.dates.length * this.config.column_width;
-        const row_height = this.options.bar_height + this.options.padding;
+        const row_width = this.dates.length * this.config.column_width!;
+        const row_height = this.options.bar_height! + this.options.padding!;
 
-        let y = this.config.header_height;
         for (
-            let y = this.config.header_height;
+            let y = this.config.header_height!;
             y < this.grid_height;
             y += row_height
         ) {
@@ -467,7 +585,7 @@ export default class Gantt {
 
     make_grid_header() {
         this.$header = this.create_el({
-            width: this.dates.length * this.config.column_width,
+            width: this.dates.length * this.config.column_width!,
             classes: 'grid-header',
             append_to: this.$container,
         });
@@ -508,7 +626,7 @@ export default class Gantt {
 
             $select.addEventListener(
                 'change',
-                function () {
+                function (this: Gantt) {
                     this.change_view_mode($select.value, true);
                 }.bind(this),
             );
@@ -529,18 +647,18 @@ export default class Gantt {
     make_grid_ticks() {
         if (this.options.lines === 'none') return;
         let tick_x = 0;
-        let tick_y = this.config.header_height;
-        let tick_height = this.grid_height - this.config.header_height;
+        let tick_y = this.config.header_height!;
+        let tick_height = this.grid_height - this.config.header_height!;
 
         let $lines_layer = createSVG('g', {
             class: 'lines_layer',
             append_to: this.layers.grid,
         });
 
-        let row_y = this.config.header_height;
+        let row_y = this.config.header_height!;
 
-        const row_width = this.dates.length * this.config.column_width;
-        const row_height = this.options.bar_height + this.options.padding;
+        const row_width = this.dates.length * this.config.column_width!;
+        const row_height = this.options.bar_height! + this.options.padding!;
         if (this.options.lines !== 'vertical') {
             for (
                 let y = this.config.header_height;
@@ -578,15 +696,15 @@ export default class Gantt {
             if (this.view_is('month')) {
                 tick_x +=
                     (date_utils.get_days_in_month(date) *
-                        this.config.column_width) /
+                        this.config.column_width!) /
                     30;
             } else if (this.view_is('year')) {
                 tick_x +=
                     (date_utils.get_days_in_year(date) *
-                        this.config.column_width) /
+                        this.config.column_width!) /
                     365;
             } else {
-                tick_x += this.config.column_width;
+                tick_x += this.config.column_width!;
             }
         }
     }
@@ -602,22 +720,22 @@ export default class Gantt {
             let extra_func;
 
             if (typeof check_highlight === 'object') {
-                let f = check_highlight.find((k) => typeof k === 'function');
+                let f = check_highlight.find((k: any) => typeof k === 'function');
                 if (f) {
                     extra_func = f;
                 }
-                if (this.options.holidays.name) {
+                if ((this.options.holidays as any).name) {
                     let dateObj = new Date(check_highlight.date + ' ');
-                    check_highlight = (d) => dateObj.getTime() === d.getTime();
-                    labels[dateObj] = check_highlight.name;
+                    check_highlight = (d: Date) => dateObj.getTime() === d.getTime();
+                    labels[dateObj.toISOString()] = check_highlight.name;
                 } else {
-                    check_highlight = (d) =>
-                        this.options.holidays[color]
-                            .filter((k) => typeof k !== 'function')
-                            .map((k) => {
+                    check_highlight = (d: Date) =>
+                        this.options.holidays![color]
+                            .filter((k: any) => typeof k !== 'function')
+                            .map((k: any) => {
                                 if (k.name) {
                                     let dateObj = new Date(k.date + ' ');
-                                    labels[dateObj] = k.name;
+                                    labels[dateObj.toISOString()] = k.name;
                                     return dateObj.getTime();
                                 }
                                 return new Date(k + ' ').getTime();
@@ -632,7 +750,7 @@ export default class Gantt {
             ) {
                 if (
                     this.config.ignored_dates.find(
-                        (k) => k.getTime() == d.getTime(),
+                        (k: Date) => k.getTime() == d.getTime(),
                     ) ||
                     (this.config.ignored_function &&
                         this.config.ignored_function(d))
@@ -643,29 +761,29 @@ export default class Gantt {
                         (date_utils.diff(
                             d,
                             this.gantt_start,
-                            this.config.unit,
+                            this.config.unit!,
                         ) /
-                            this.config.step) *
-                        this.config.column_width;
-                    const height = this.grid_height - this.config.header_height;
+                            this.config.step!) *
+                        this.config.column_width!;
+                    const height = this.grid_height - this.config.header_height!;
                     const d_formatted = date_utils
                         .format(d, 'YYYY-MM-DD', this.options.language)
                         .replace(' ', '_');
 
-                    if (labels[d]) {
+                    if (labels[d.toISOString()]) {
                         let label = this.create_el({
                             classes: 'holiday-label ' + 'label_' + d_formatted,
                             append_to: this.$extras,
                         });
-                        label.textContent = labels[d];
+                        label.textContent = labels[d.toISOString()];
                     }
                     createSVG('rect', {
                         x: Math.round(x),
-                        y: this.config.header_height,
+                        y: this.config.header_height!,
                         width:
-                            this.config.column_width /
+                            this.config.column_width! /
                             date_utils.convert_scales(
-                                this.config.view_mode.step,
+                                this.config.view_mode!.step,
                                 'day',
                             ),
                         height,
@@ -688,26 +806,28 @@ export default class Gantt {
         if (!res) return;
 
         const [_, el] = res;
-        el.classList.add('current-date-highlight');
+        if (el && 'classList' in el) {
+            (el as HTMLElement).classList.add('current-date-highlight');
+        }
 
         const diff_in_units = date_utils.diff(
             new Date(),
             this.gantt_start,
-            this.config.unit,
+            this.config.unit!,
         );
 
         const left =
-            (diff_in_units / this.config.step) * this.config.column_width;
+            (diff_in_units / this.config.step!) * this.config.column_width!;
 
         this.$current_highlight = this.create_el({
-            top: this.config.header_height,
+            top: this.config.header_height!,
             left,
-            height: this.grid_height - this.config.header_height,
+            height: this.grid_height - this.config.header_height!,
             classes: 'current-highlight',
             append_to: this.$container,
         });
         this.$current_ball_highlight = this.create_el({
-            top: this.config.header_height - 6,
+            top: this.config.header_height! - 6,
             left: left - 2.5,
             width: 6,
             height: 6,
@@ -721,7 +841,7 @@ export default class Gantt {
         this.config.ignored_positions = [];
 
         const height =
-            (this.options.bar_height + this.options.padding) *
+            (this.options.bar_height! + this.options.padding!) *
             this.tasks.length;
         this.layers.grid.innerHTML += `<pattern id="diagonalHatch" patternUnits="userSpaceOnUse" width="4" height="4">
           <path d="M-1,1 l2,-2
@@ -737,7 +857,7 @@ export default class Gantt {
         ) {
             if (
                 !this.config.ignored_dates.find(
-                    (k) => k.getTime() == d.getTime(),
+                    (k: Date) => k.getTime() == d.getTime(),
                 ) &&
                 (!this.config.ignored_function ||
                     !this.config.ignored_function(d))
@@ -746,14 +866,14 @@ export default class Gantt {
             let diff =
                 date_utils.convert_scales(
                     date_utils.diff(d, this.gantt_start) + 'd',
-                    this.config.unit,
-                ) / this.config.step;
+                    this.config.unit!,
+                ) / this.config.step!;
 
-            this.config.ignored_positions.push(diff * this.config.column_width);
+            this.config.ignored_positions.push(diff * this.config.column_width!);
             createSVG('rect', {
-                x: diff * this.config.column_width,
-                y: this.config.header_height,
-                width: this.config.column_width,
+                x: diff * this.config.column_width!,
+                y: this.config.header_height!,
+                width: this.config.column_width!,
                 height: height,
                 class: 'ignored-bar',
                 style: 'fill: url(#diagonalHatch);',
@@ -761,18 +881,23 @@ export default class Gantt {
             });
         }
 
-        const highlightDimensions = this.highlight_current(
-            this.config.view_mode,
-        );
-
-        if (!highlightDimensions) return;
+        this.highlight_current();
     }
 
-    create_el({ left, top, width, height, id, classes, append_to, type }) {
+    create_el({ left, top, width, height, id, classes, append_to, type }: {
+        left?: number;
+        top?: number;
+        width?: number;
+        height?: number;
+        id?: string;
+        classes: string;
+        append_to?: HTMLElement | SVGElement;
+        type?: string;
+    }) {
         let $el = document.createElement(type || 'div');
         for (let cls of classes.split(' ')) $el.classList.add(cls);
-        $el.style.top = top + 'px';
-        $el.style.left = left + 'px';
+        if (top !== undefined) $el.style.top = top + 'px';
+        if (left !== undefined) $el.style.left = left + 'px';
         if (id) $el.id = id;
         if (width) $el.style.width = width + 'px';
         if (height) $el.style.height = height + 'px';
@@ -781,7 +906,7 @@ export default class Gantt {
     }
 
     make_dates() {
-        this.get_dates_to_draw().forEach((date, i) => {
+        this.get_dates_to_draw().forEach((date: any, i: number) => {
             if (date.lower_text) {
                 let $lower_text = this.create_el({
                     left: date.x,
@@ -808,8 +933,8 @@ export default class Gantt {
     }
 
     get_dates_to_draw() {
-        let last_date_info = null;
-        const dates = this.dates.map((date, i) => {
+        let last_date_info: any = null;
+        const dates = this.dates.map((date: Date, i: number) => {
             const d = this.get_date_info(date, last_date_info, i);
             last_date_info = d;
             return d;
@@ -817,29 +942,29 @@ export default class Gantt {
         return dates;
     }
 
-    get_date_info(date, last_date_info) {
-        let last_date = last_date_info ? last_date_info.date : null;
+    get_date_info(date: Date, last_date_info?: any, i?: number) {
+        let last_date: Date | null = last_date_info ? last_date_info.date : null;
 
-        let column_width = this.config.column_width;
+        let column_width = this.config.column_width!;
 
         const x = last_date_info
             ? last_date_info.x + last_date_info.column_width
             : 0;
 
-        let upper_text = this.config.view_mode.upper_text;
-        let lower_text = this.config.view_mode.lower_text;
+        let upper_text = this.config.view_mode!.upper_text;
+        let lower_text = this.config.view_mode!.lower_text;
 
         if (!upper_text) {
-            this.config.view_mode.upper_text = () => '';
+            this.config.view_mode!.upper_text = () => '';
         } else if (typeof upper_text === 'string') {
-            this.config.view_mode.upper_text = (date) =>
+            this.config.view_mode!.upper_text = (date: Date) =>
                 date_utils.format(date, upper_text, this.options.language);
         }
 
         if (!lower_text) {
-            this.config.view_mode.lower_text = () => '';
+            this.config.view_mode!.lower_text = () => '';
         } else if (typeof lower_text === 'string') {
-            this.config.view_mode.lower_text = (date) =>
+            this.config.view_mode!.lower_text = (date: Date) =>
                 date_utils.format(date, lower_text, this.options.language);
         }
 
@@ -848,29 +973,29 @@ export default class Gantt {
             formatted_date: sanitize(
                 date_utils.format(
                     date,
-                    this.config.date_format,
+                    this.config.date_format!,
                     this.options.language,
                 ),
             ),
-            column_width: this.config.column_width,
+            column_width: this.config.column_width!,
             x,
-            upper_text: this.config.view_mode.upper_text(
+            upper_text: (this.config.view_mode!.upper_text as any)(
                 date,
                 last_date,
                 this.options.language,
             ),
-            lower_text: this.config.view_mode.lower_text(
+            lower_text: (this.config.view_mode!.lower_text as any)(
                 date,
                 last_date,
                 this.options.language,
             ),
             upper_y: 17,
-            lower_y: this.options.upper_header_height + 5,
+            lower_y: this.options.upper_header_height! + 5,
         };
     }
 
     make_bars() {
-        this.bars = this.tasks.map((task) => {
+        this.bars = this.tasks.map((task: Task) => {
             const bar = new Bar(this, task);
             this.layers.bar.appendChild(bar.group);
             return bar;
@@ -881,8 +1006,9 @@ export default class Gantt {
         this.arrows = [];
         for (let task of this.tasks) {
             let arrows = [];
-            arrows = task.dependencies
-                .map((task_id) => {
+            if (task.dependencies && Array.isArray(task.dependencies)) {
+                arrows = task.dependencies
+                    .map((task_id: string) => {
                     const dependency = this.get_task(task_id);
                     if (!dependency) return;
                     const arrow = new Arrow(
@@ -891,16 +1017,17 @@ export default class Gantt {
                         this.bars[task._index], // to_task
                     );
                     this.layers.arrow.appendChild(arrow.element);
-                    return arrow;
-                })
-                .filter(Boolean); // filter falsy values
+                        return arrow;
+                    })
+                    .filter(Boolean); // filter falsy values
+            }
             this.arrows = this.arrows.concat(arrows);
         }
     }
 
     map_arrows_on_bars() {
         for (let bar of this.bars) {
-            bar.arrows = this.arrows.filter((arrow) => {
+            bar.arrows = this.arrows.filter((arrow: Arrow) => {
                 return (
                     arrow.from_task.task.id === bar.task.id ||
                     arrow.to_task.task.id === bar.task.id
@@ -912,39 +1039,43 @@ export default class Gantt {
     set_dimensions() {
         const { width: cur_width } = this.$svg.getBoundingClientRect();
         const actual_width = this.$svg.querySelector('.grid .grid-row')
-            ? this.$svg.querySelector('.grid .grid-row').getAttribute('width')
-            : 0;
-        if (cur_width < actual_width) {
-            this.$svg.setAttribute('width', actual_width);
+            ? this.$svg.querySelector('.grid .grid-row')!.getAttribute('width')
+            : '0';
+        const actualWidthNum = actual_width ? parseFloat(actual_width) : 0;
+        if (cur_width < actualWidthNum) {
+            this.$svg.setAttribute('width', actual_width!);
         }
     }
 
-    set_scroll_position(date) {
+    set_scroll_position(date?: string | Date | null) {
         if (this.options.infinite_padding && (!date || date === 'start')) {
             let [min_start, ..._] = this.get_start_end_positions();
             this.$container.scrollLeft = min_start;
             return;
         }
+        let scrollDate: Date;
         if (!date || date === 'start') {
-            date = this.gantt_start;
+            scrollDate = this.gantt_start;
         } else if (date === 'end') {
-            date = this.gantt_end;
+            scrollDate = this.gantt_end;
         } else if (date === 'today') {
             return this.scroll_current();
         } else if (typeof date === 'string') {
-            date = date_utils.parse(date);
+            scrollDate = date_utils.parse(date);
+        } else {
+            scrollDate = date;
         }
 
         // Weird bug where infinite padding results in one day offset in scroll
         // Related to header-body displacement
         const units_since_first_task = date_utils.diff(
-            date,
+            scrollDate,
             this.gantt_start,
-            this.config.unit,
+            this.config.unit!,
         );
         const scroll_pos =
-            (units_since_first_task / this.config.step) *
-            this.config.column_width;
+            (units_since_first_task / this.config.step!) *
+            this.config.column_width!;
 
         this.$container.scrollTo({
             left: scroll_pos - this.config.column_width / 6,
@@ -958,11 +1089,11 @@ export default class Gantt {
 
         this.current_date = date_utils.add(
             this.gantt_start,
-            this.$container.scrollLeft / this.config.column_width,
-            this.config.unit,
+            this.$container.scrollLeft / this.config.column_width!,
+            this.config.unit!,
         );
 
-        let current_upper = this.config.view_mode.upper_text(
+        let current_upper = (this.config.view_mode!.upper_text as any)(
             this.current_date,
             null,
             this.options.language,
@@ -975,22 +1106,25 @@ export default class Gantt {
         this.current_date = date_utils.add(
             this.gantt_start,
             (this.$container.scrollLeft + $el.clientWidth) /
-                this.config.column_width,
-            this.config.unit,
+                this.config.column_width!,
+            this.config.unit!,
         );
-        current_upper = this.config.view_mode.upper_text(
+        current_upper = (this.config.view_mode!.upper_text as any)(
             this.current_date,
             null,
             this.options.language,
         );
-        $el = this.upperTexts.find((el) => el.textContent === current_upper);
-        $el.classList.add('current-upper');
-        this.$current = $el;
+        const foundUpperEl = this.upperTexts.find((el) => el.textContent === current_upper);
+        if (foundUpperEl) {
+            $el = foundUpperEl as HTMLElement;
+            $el.classList.add('current-upper');
+            this.$current = foundUpperEl as HTMLElement;
+        }
     }
 
     scroll_current() {
         let res = this.get_closest_date();
-        if (res) this.set_scroll_position(res[0]);
+        if (res) this.set_scroll_position(res[0] as Date);
     }
 
     get_closest_date() {
@@ -1011,14 +1145,14 @@ export default class Gantt {
 
         // safety check to prevent infinite loop
         let c = 0;
-        while (!el && c < this.config.step) {
-            current = date_utils.add(current, -1, this.config.unit);
+        while (!el && c < this.config.step!) {
+            current = date_utils.add(current, -1, this.config.unit!);
             el = this.$container.querySelector(
                 '.date_' +
                     sanitize(
                         date_utils.format(
                             current,
-                            this.config.date_format,
+                            this.config.date_format!,
                             this.options.language,
                         ),
                     ),
@@ -1029,11 +1163,11 @@ export default class Gantt {
             new Date(
                 date_utils.format(
                     current,
-                    this.config.date_format,
+                    this.config.date_format!,
                     this.options.language,
                 ) + ' ',
             ),
-            el,
+            el!,
         ];
     }
 
@@ -1052,21 +1186,21 @@ export default class Gantt {
     bind_holiday_labels() {
         const $highlights =
             this.$container.querySelectorAll('.holiday-highlight');
-        for (let h of $highlights) {
+        for (let h of Array.from($highlights)) {
             const label = this.$container.querySelector(
                 '.label_' + h.classList[1],
-            );
+            ) as HTMLElement;
             if (!label) continue;
-            let timeout;
-            h.onmouseenter = (e) => {
+            let timeout: ReturnType<typeof setTimeout>;
+            (h as HTMLElement).onmouseenter = (e: MouseEvent) => {
                 timeout = setTimeout(() => {
                     label.classList.add('show');
-                    label.style.left = (e.offsetX || e.layerX) + 'px';
-                    label.style.top = (e.offsetY || e.layerY) + 'px';
+                    label.style.left = (e.offsetX || (e as any).layerX) + 'px';
+                    label.style.top = (e.offsetY || (e as any).layerY) + 'px';
                 }, 300);
             };
 
-            h.onmouseleave = (e) => {
+            (h as HTMLElement).onmouseleave = (e: MouseEvent) => {
                 clearTimeout(timeout);
                 label.classList.remove('show');
             };
@@ -1102,11 +1236,11 @@ export default class Gantt {
             is_dragging || is_resizing_left || is_resizing_right;
 
         this.$svg.onclick = (e) => {
-            if (e.target.classList.contains('grid-row')) this.unselect_all();
+            if ((e.target as Element).classList.contains('grid-row')) this.unselect_all();
         };
 
         let pos = 0;
-        $.on(this.$svg, 'mousemove', '.bar-wrapper, .handle', (e) => {
+        $.on(this.$svg, 'mousemove', '.bar-wrapper, .handle', (e: any) => {
             if (
                 this.bar_being_dragged === false &&
                 Math.abs((e.offsetX || e.layerX) - pos) > 10
@@ -1114,7 +1248,7 @@ export default class Gantt {
                 this.bar_being_dragged = true;
         });
 
-        $.on(this.$svg, 'mousedown', '.bar-wrapper, .handle', (e, element) => {
+        $.on(this.$svg, 'mousedown', '.bar-wrapper, .handle', (e: any, element: any) => {
             const bar_wrapper = $.closest('.bar-wrapper', element);
             if (element.classList.contains('left')) {
                 is_resizing_left = true;
@@ -1156,10 +1290,10 @@ export default class Gantt {
 
         if (this.options.infinite_padding) {
             let extended = false;
-            $.on(this.$container, 'mousewheel', (e) => {
+            $.on(this.$container, 'mousewheel', (e: any) => {
                 let trigger = this.$container.scrollWidth / 2;
-                if (!extended && e.currentTarget.scrollLeft <= trigger) {
-                    let old_scroll_left = e.currentTarget.scrollLeft;
+                if (!extended && (e.currentTarget as HTMLElement).scrollLeft <= trigger) {
+                    let old_scroll_left = (e.currentTarget as HTMLElement).scrollLeft;
                     extended = true;
 
                     this.gantt_start = date_utils.add(
@@ -1169,20 +1303,20 @@ export default class Gantt {
                     );
                     this.setup_date_values();
                     this.render();
-                    e.currentTarget.scrollLeft =
+                    (e.currentTarget as HTMLElement).scrollLeft =
                         old_scroll_left +
-                        this.config.column_width * this.config.extend_by_units;
+                        this.config.column_width! * this.config.extend_by_units;
                     setTimeout(() => (extended = false), 300);
                 }
 
                 if (
                     !extended &&
-                    e.currentTarget.scrollWidth -
-                        (e.currentTarget.scrollLeft +
-                            e.currentTarget.clientWidth) <=
+                    (e.currentTarget as HTMLElement).scrollWidth -
+                        ((e.currentTarget as HTMLElement).scrollLeft +
+                            (e.currentTarget as HTMLElement).clientWidth) <=
                         trigger
                 ) {
-                    let old_scroll_left = e.currentTarget.scrollLeft;
+                    let old_scroll_left = (e.currentTarget as HTMLElement).scrollLeft;
                     extended = true;
                     this.gantt_end = date_utils.add(
                         this.gantt_end,
@@ -1191,55 +1325,55 @@ export default class Gantt {
                     );
                     this.setup_date_values();
                     this.render();
-                    e.currentTarget.scrollLeft = old_scroll_left;
+                    (e.currentTarget as HTMLElement).scrollLeft = old_scroll_left;
                     setTimeout(() => (extended = false), 300);
                 }
             });
         }
 
-        $.on(this.$container, 'scroll', (e) => {
+        $.on(this.$container, 'scroll', (e: any) => {
             let localBars = [];
-            const ids = this.bars.map(({ group }) =>
+            const ids = this.bars.map(({ group }: any) =>
                 group.getAttribute('data-id'),
             );
-            let dx;
+            let dx: number | undefined;
             if (x_on_scroll_start) {
-                dx = e.currentTarget.scrollLeft - x_on_scroll_start;
+                dx = (e.currentTarget as HTMLElement).scrollLeft - x_on_scroll_start;
             }
 
             // Calculate current scroll position's upper text
             this.current_date = date_utils.add(
                 this.gantt_start,
-                (e.currentTarget.scrollLeft / this.config.column_width) *
-                    this.config.step,
-                this.config.unit,
+                ((e.currentTarget as HTMLElement).scrollLeft / this.config.column_width!) *
+                    this.config.step!,
+                this.config.unit!,
             );
 
-            let current_upper = this.config.view_mode.upper_text(
-                this.current_date,
-                null,
-                this.options.language,
-            );
+            const upperTextFn = this.config.view_mode!.upper_text;
+            let current_upper = typeof upperTextFn === 'function'
+                ? upperTextFn(this.current_date, null, this.options.language)
+                : upperTextFn;
             let $el = this.upperTexts.find(
-                (el) => el.textContent === current_upper,
-            );
+                (el: any) => el.textContent === current_upper,
+            ) as HTMLElement;
 
             // Recalculate for smoother experience
-            this.current_date = date_utils.add(
-                this.gantt_start,
-                ((e.currentTarget.scrollLeft + $el.clientWidth) /
-                    this.config.column_width) *
-                    this.config.step,
-                this.config.unit,
-            );
-            current_upper = this.config.view_mode.upper_text(
-                this.current_date,
-                null,
-                this.options.language,
-            );
-            $el = this.upperTexts.find(
-                (el) => el.textContent === current_upper,
-            );
+            if ($el) {
+                this.current_date = date_utils.add(
+                    this.gantt_start,
+                    (((e.currentTarget as HTMLElement).scrollLeft + $el.clientWidth) /
+                        this.config.column_width!) *
+                        this.config.step!,
+                    this.config.unit!,
+                );
+                const upperTextFn3 = this.config.view_mode!.upper_text;
+                current_upper = typeof upperTextFn3 === 'function'
+                    ? upperTextFn3(this.current_date, null, this.options.language)
+                    : upperTextFn3;
+                $el = this.upperTexts.find(
+                    (el) => el.textContent === current_upper,
+                ) as HTMLElement;
+            }
 
             if ($el !== this.$current) {
                 if (this.$current)
@@ -1249,7 +1383,7 @@ export default class Gantt {
                 this.$current = $el;
             }
 
-            x_on_scroll_start = e.currentTarget.scrollLeft;
+            x_on_scroll_start = (e.currentTarget as HTMLElement).scrollLeft;
             let [min_start, max_start, max_end] =
                 this.get_start_end_positions();
 
@@ -1263,7 +1397,7 @@ export default class Gantt {
                     });
                 };
             } else if (
-                x_on_scroll_start + e.currentTarget.offsetWidth <
+                x_on_scroll_start + (e.currentTarget as HTMLElement).offsetWidth <
                 min_start - 100
             ) {
                 this.$adjust.innerHTML = '&rarr;';
@@ -1284,14 +1418,14 @@ export default class Gantt {
                     localBars.forEach((bar) => {
                         bar.update_label_position_on_horizontal_scroll({
                             x: dx,
-                            sx: e.currentTarget.scrollLeft,
+                            sx: (e.currentTarget as HTMLElement).scrollLeft,
                         });
                     });
                 }
             }
         });
 
-        $.on(this.$svg, 'mousemove', (e) => {
+        $.on(this.$svg, 'mousemove', (e: any) => {
             if (!action_in_progress()) return;
             const dx = (e.offsetX || e.layerX) - x_on_start;
 
@@ -1356,7 +1490,7 @@ export default class Gantt {
         let $bar_progress = null;
         let $bar = null;
 
-        $.on(this.$svg, 'mousedown', '.handle.progress', (e, handle) => {
+        $.on(this.$svg, 'mousedown', '.handle.progress', (e: any, handle: any) => {
             is_resizing = true;
             x_on_start = e.offsetX || e.layerX;
 
@@ -1378,7 +1512,7 @@ export default class Gantt {
             d + this.config.column_width,
         ]);
 
-        $.on(this.$svg, 'mousemove', (e) => {
+        $.on(this.$svg, 'mousemove', (e: any) => {
             if (!is_resizing) return;
             let now_x = e.offsetX || e.layerX;
 
@@ -1507,7 +1641,7 @@ export default class Gantt {
         }
 
         if (Array.isArray(modes)) {
-            return modes.some(view_is);
+            return modes.some(m => this.view_is(m));
         }
 
         return this.config.view_mode.name === modes.name;
@@ -1577,20 +1711,22 @@ export default class Gantt {
     }
 }
 
-Gantt.VIEW_MODE = {
-    HOUR: DEFAULT_VIEW_MODES[0],
-    QUARTER_DAY: DEFAULT_VIEW_MODES[1],
-    HALF_DAY: DEFAULT_VIEW_MODES[2],
-    DAY: DEFAULT_VIEW_MODES[3],
-    WEEK: DEFAULT_VIEW_MODES[4],
-    MONTH: DEFAULT_VIEW_MODES[5],
-    YEAR: DEFAULT_VIEW_MODES[6],
-};
+Object.assign(Gantt, {
+    VIEW_MODE: {
+        HOUR: DEFAULT_VIEW_MODES[0],
+        QUARTER_DAY: DEFAULT_VIEW_MODES[1],
+        HALF_DAY: DEFAULT_VIEW_MODES[2],
+        DAY: DEFAULT_VIEW_MODES[3],
+        WEEK: DEFAULT_VIEW_MODES[4],
+        MONTH: DEFAULT_VIEW_MODES[5],
+        YEAR: DEFAULT_VIEW_MODES[6],
+    }
+});
 
-function generate_id(task) {
+function generate_id(task: Task): string {
     return task.name + '_' + Math.random().toString(36).slice(2, 12);
 }
 
-function sanitize(s) {
-    return s.replaceAll(' ', '_').replaceAll(':', '_').replaceAll('.', '_');
+function sanitize(s: string): string {
+    return s.replace(/ /g, '_').replace(/:/g, '_').replace(/\./g, '_');
 }
