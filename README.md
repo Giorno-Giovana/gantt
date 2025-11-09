@@ -33,6 +33,8 @@ Install with:
 
 ```bash
 npm install frappe-gantt
+# or with bun
+bun add frappe-gantt
 ```
 
 Include it in your HTML:
@@ -162,8 +164,8 @@ If you want to contribute enhancements or fixes:
 
 1. Clone this repo.
 2. `cd` into project directory.
-3. Run `pnpm i` to install dependencies.
-4. `pnpm run build` to build files - or `pnpm run build-dev` to build and watch for changes.
+3. Run `bun install` to install dependencies.
+4. `bun run build` to build files - or `bun run dev` to build and watch for changes.
 5. Open `index.html` in your browser.
 6. Make your code changes and test them.
 
