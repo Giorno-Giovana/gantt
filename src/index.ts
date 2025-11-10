@@ -106,11 +106,11 @@ export interface GanttConfig {
     extend_by_units: number;
     ignored_function?: (d: Date) => boolean;
     view_mode?: ViewMode;
-    step?: number;
-    unit?: TimeScale;
-    column_width?: number;
-    header_height?: number;
-    date_format?: string;
+    step: number;
+    unit: TimeScale;
+    column_width: number;
+    header_height: number;
+    date_format: string;
 }
 
 interface DateInfo {
@@ -124,13 +124,31 @@ interface DateInfo {
     lower_y: number;
 }
 
-// Helper function to safely get mouse position (handles both standard and legacy properties)
+/**
+ * Helper functions to safely get mouse position
+ *
+ * Modern browsers use offsetX/offsetY, but older browsers may use layerX/layerY.
+ * These legacy properties are not in TypeScript's MouseEvent type definition,
+ * so we access them safely using bracket notation and runtime type checking.
+ */
 function getMouseX(e: MouseEvent): number {
-    return e.offsetX ?? (e as MouseEvent & { layerX?: number }).layerX ?? 0;
+    if (e.offsetX !== undefined) {
+        return e.offsetX;
+    }
+    // Check for legacy property that may exist in older browsers
+    const eventObj = e as unknown as Record<string, unknown>;
+    const value = eventObj.layerX;
+    return typeof value === 'number' ? value : 0;
 }
 
 function getMouseY(e: MouseEvent): number {
-    return e.offsetY ?? (e as MouseEvent & { layerY?: number }).layerY ?? 0;
+    if (e.offsetY !== undefined) {
+        return e.offsetY;
+    }
+    // Check for legacy property that may exist in older browsers
+    const eventObj = e as unknown as Record<string, unknown>;
+    const value = eventObj.layerY;
+    return typeof value === 'number' ? value : 0;
 }
 
 export default class Gantt {
@@ -179,7 +197,16 @@ export default class Gantt {
 
         this.options = {};
         this.original_options = {};
-        this.config = { ignored_dates: [], ignored_positions: [], extend_by_units: 10 };
+        this.config = {
+            ignored_dates: [],
+            ignored_positions: [],
+            extend_by_units: 10,
+            step: 1,
+            unit: 'day',
+            column_width: 45,
+            header_height: 85,
+            date_format: 'YYYY-MM-DD'
+        };
         this.tasks = [];
         this.dates = [];
         this.gantt_start = new Date();
@@ -302,6 +329,11 @@ export default class Gantt {
             ignored_dates: [],
             ignored_positions: [],
             extend_by_units: 10,
+            step: 1,
+            unit: 'day',
+            column_width: 45,
+            header_height: 85,
+            date_format: 'YYYY-MM-DD'
         };
 
         if (typeof this.options.ignore !== 'function') {
