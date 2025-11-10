@@ -61,10 +61,7 @@ export default class Bar {
         this.gantt = gantt;
         this.task = task;
 
-        // Initialize SVG elements - these will be properly set in prepare_wrappers and draw
-        this.group = createSVG('g', {});
-        this.bar_group = createSVG('g', {});
-        this.handle_group = createSVG('g', {});
+        // Initialize temporary SVG elements - will be properly set in prepare_wrappers and draw
         this.$bar = createSVG('rect', {});
         this.$bar_progress = createSVG('rect', {});
         this.$expected_bar_progress = createSVG('rect', {});
@@ -72,7 +69,10 @@ export default class Bar {
         this.$date_highlight = document.createElement('div');
 
         this.set_defaults(gantt, task);
-        this.prepare_wrappers();
+        const wrappers = this.prepare_wrappers();
+        this.group = wrappers.group;
+        this.bar_group = wrappers.bar_group;
+        this.handle_group = wrappers.handle_group;
         this.prepare_helpers();
         this.refresh();
     }
@@ -98,21 +98,22 @@ export default class Bar {
         this.name = this.name || '';
     }
 
-    prepare_wrappers() {
-        this.group = createSVG('g', {
+    prepare_wrappers(): { group: SVGElement; bar_group: SVGElement; handle_group: SVGElement } {
+        const group = createSVG('g', {
             class:
                 'bar-wrapper' +
                 (this.task.custom_class ? ' ' + this.task.custom_class : ''),
             'data-id': this.task.id,
         });
-        this.bar_group = createSVG('g', {
+        const bar_group = createSVG('g', {
             class: 'bar-group',
-            append_to: this.group,
+            append_to: group,
         });
-        this.handle_group = createSVG('g', {
+        const handle_group = createSVG('g', {
             class: 'handle-group',
-            append_to: this.group,
+            append_to: group,
         });
+        return { group, bar_group, handle_group };
     }
 
     prepare_values() {

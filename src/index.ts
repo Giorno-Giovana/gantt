@@ -602,7 +602,10 @@ export default class Gantt {
 
     render() {
         this.clear();
-        this.setup_layers();
+        const { layers, extras, adjust } = this.setup_layers();
+        this.layers = layers;
+        this.$extras = extras;
+        this.$adjust = adjust;
         this.make_grid();
         this.make_dates();
         this.make_grid_extras();
@@ -613,33 +616,39 @@ export default class Gantt {
         this.set_scroll_position(this.options.scroll_to);
     }
 
-    setup_layers() {
-        this.layers = {};
-        const layers = ['grid', 'arrow', 'progress', 'bar'];
+    setup_layers(): { layers: Record<string, SVGElement>; extras: HTMLElement; adjust: HTMLElement } {
+        const layers: Record<string, SVGElement> = {};
+        const layerNames = ['grid', 'arrow', 'progress', 'bar'];
         // make group layers
-        for (let layer of layers) {
-            this.layers[layer] = createSVG('g', {
+        for (let layer of layerNames) {
+            layers[layer] = createSVG('g', {
                 class: layer,
                 append_to: this.$svg,
             });
         }
-        this.$extras = this.create_el({
+        const extras = this.create_el({
             classes: 'extras',
             append_to: this.$container,
         });
-        this.$adjust = this.create_el({
+        const adjust = this.create_el({
             classes: 'adjust hide',
-            append_to: this.$extras,
+            append_to: extras,
             type: 'button',
         });
-        this.$adjust.innerHTML = '&larr;';
+        adjust.innerHTML = '&larr;';
+        return { layers, extras, adjust };
     }
 
     make_grid() {
         this.make_grid_background();
         this.make_grid_rows();
-        this.make_grid_header();
-        this.make_side_header();
+        const { header, upper_header, lower_header } = this.make_grid_header();
+        this.$header = header;
+        this.$upper_header = upper_header;
+        this.$lower_header = lower_header;
+        const { side_header, today_button } = this.make_side_header();
+        this.$side_header = side_header;
+        this.$today_button = today_button;
     }
 
     make_grid_extras() {
@@ -700,26 +709,28 @@ export default class Gantt {
         }
     }
 
-    make_grid_header() {
-        this.$header = this.create_el({
+    make_grid_header(): { header: HTMLElement; upper_header: HTMLElement; lower_header: HTMLElement } {
+        const header = this.create_el({
             width: this.dates.length * this.config.column_width!,
             classes: 'grid-header',
             append_to: this.$container,
         });
 
-        this.$upper_header = this.create_el({
+        const upper_header = this.create_el({
             classes: 'upper-header',
-            append_to: this.$header,
+            append_to: header,
         });
-        this.$lower_header = this.create_el({
+        const lower_header = this.create_el({
             classes: 'lower-header',
-            append_to: this.$header,
+            append_to: header,
         });
+
+        return { header, upper_header, lower_header };
     }
 
-    make_side_header() {
-        this.$side_header = this.create_el({ classes: 'side-header' });
-        this.$upper_header.prepend(this.$side_header);
+    make_side_header(): { side_header: HTMLElement; today_button: HTMLElement | undefined } {
+        const side_header = this.create_el({ classes: 'side-header' });
+        this.$upper_header.prepend(side_header);
 
         // Create view mode change select
         if (this.options.view_mode_select) {
@@ -750,18 +761,20 @@ export default class Gantt {
                     this.change_view_mode($select.value, true);
                 }.bind(this),
             );
-            this.$side_header.appendChild($select);
+            side_header.appendChild($select);
         }
 
         // Create today button
+        let today_button: HTMLElement | undefined;
         if (this.options.today_button) {
-            let $today_button = document.createElement('button');
-            $today_button.classList.add('today-button');
-            $today_button.textContent = 'Today';
-            $today_button.onclick = this.scroll_current.bind(this);
-            this.$side_header.prepend($today_button);
-            this.$today_button = $today_button;
+            today_button = document.createElement('button');
+            today_button.classList.add('today-button');
+            today_button.textContent = 'Today';
+            today_button.onclick = this.scroll_current.bind(this);
+            side_header.prepend(today_button);
         }
+
+        return { side_header, today_button };
     }
 
     make_grid_ticks() {
