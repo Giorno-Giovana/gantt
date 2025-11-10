@@ -143,13 +143,20 @@ const DEFAULT_OPTIONS = {
         else ctx.set_subtitle('');
 
         const task = ctx.task;
+
+        // These properties should be defined after task processing, but we check to be safe
+        if (!task._start || !task._end) {
+            ctx.set_details('Task dates not available');
+            return;
+        }
+
         const start_date = date_utils.format(
-            task._start!,
+            task._start,
             'MMM D',
             ctx.chart.options.language,
         );
         const end_date = date_utils.format(
-            date_utils.add(task._end!, -1, 'second'),
+            date_utils.add(task._end, -1, 'second'),
             'MMM D',
             ctx.chart.options.language,
         );
