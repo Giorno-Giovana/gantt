@@ -14,13 +14,11 @@ export default class Arrow {
         this.from_task = from_task;
         this.to_task = to_task;
 
-        this.path = '';
-        this.element = createSVG('path', {});
-        this.calculate_path();
-        this.draw();
+        this.path = this.calculate_path();
+        this.element = this.draw();
     }
 
-    calculate_path() {
+    calculate_path(): string {
         let start_x =
             this.from_task.$bar.getX() + this.from_task.$bar.getWidth() / 2;
 
@@ -70,7 +68,7 @@ export default class Arrow {
                 this.to_task.$bar.getHeight() / 2 -
                 curve_y;
             const left = this.to_task.$bar.getX() - this.gantt.options.padding;
-            this.path = `
+            return `
                 M ${start_x} ${start_y}
                 v ${down_1}
                 a ${curve} ${curve} 0 0 1 ${-curve} ${curve}
@@ -87,7 +85,7 @@ export default class Arrow {
 
             let offset = from_is_below_to ? end_y + curve : end_y - curve;
 
-            this.path = `
+            return `
               M ${start_x} ${start_y}
               V ${offset}
               a ${curve} ${curve} 0 0 ${clockwise} ${curve} ${curve}
@@ -98,8 +96,8 @@ export default class Arrow {
         }
     }
 
-    draw() {
-        this.element = createSVG('path', {
+    draw(): SVGElement {
+        return createSVG('path', {
             d: this.path,
             'data-from': this.from_task.task.id,
             'data-to': this.to_task.task.id,
@@ -107,7 +105,7 @@ export default class Arrow {
     }
 
     update() {
-        this.calculate_path();
+        this.path = this.calculate_path();
         this.element.setAttribute('d', this.path);
     }
 }
